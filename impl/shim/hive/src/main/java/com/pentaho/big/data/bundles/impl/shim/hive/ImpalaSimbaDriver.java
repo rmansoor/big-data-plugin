@@ -37,7 +37,7 @@ public class ImpalaSimbaDriver extends HiveSimbaDriver {
   }
 
   @Override
-  protected Driver checkBeforeCallActiveDriver( String url ) throws SQLException {
+  public Driver checkBeforeCallActiveDriver( String url ) throws SQLException {
     if ( !url.contains( SIMBA_SPECIFIC_URL_PARAMETER ) || !url.matches( ".+:impala:.*" ) ) {
       // BAD-215 check required to distinguish Simba driver
       return null;

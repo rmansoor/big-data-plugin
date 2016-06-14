@@ -157,7 +157,7 @@ public class ShimDriverLoader implements HadoopConfigurationListener {
     } );
   }
 
-  protected interface DriverFactory {
+  public interface DriverFactory {
     Driver create( Driver delegate, String hadoopConfigurationId, boolean defaultConfiguration,
                    JdbcUrlParser jdbcUrlParser );
   }

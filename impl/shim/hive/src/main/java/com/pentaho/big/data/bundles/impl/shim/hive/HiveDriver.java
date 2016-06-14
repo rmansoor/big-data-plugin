@@ -40,7 +40,7 @@ import java.util.logging.Logger;
  * Created by bryan on 3/29/16.
  */
 public class HiveDriver implements Driver {
-  protected static final String SIMBA_SPECIFIC_URL_PARAMETER = "AuthMech=";
+  public static final String SIMBA_SPECIFIC_URL_PARAMETER = "AuthMech=";
   /**
    * SQL State "feature not supported" with no subclass specified
    */
@@ -141,7 +141,7 @@ public class HiveDriver implements Driver {
     }
   }
 
-  protected Driver checkBeforeCallActiveDriver( String url ) throws SQLException {
+ public Driver checkBeforeCallActiveDriver( String url ) throws SQLException {
     if ( url.contains( SIMBA_SPECIFIC_URL_PARAMETER ) ) {
       // BAD-215 check required to distinguish Simba driver
       return null;
