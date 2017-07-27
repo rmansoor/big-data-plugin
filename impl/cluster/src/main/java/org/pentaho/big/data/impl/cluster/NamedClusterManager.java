@@ -28,6 +28,7 @@ import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
+import org.pentaho.big.data.api.cluster.NamedClusterListener;
 import org.pentaho.big.data.api.cluster.NamedCluster;
 import org.pentaho.big.data.api.cluster.NamedClusterService;
 import org.pentaho.metastore.api.IMetaStore;
@@ -51,6 +52,25 @@ public class NamedClusterManager implements NamedClusterService {
   private NamedCluster clusterTemplate;
 
   private Map<String, Object> properties = new HashMap<>();
+
+  private List<NamedClusterListener> nameClusterListeners = new ArrayList<NamedClusterListener>(  );
+
+  @Override
+  public void addNamedClusterListener( NamedClusterListener namedClusterListener ) {
+    nameClusterListeners.add( namedClusterListener );
+  }
+
+  private void fireNamedClusterOnDeleteEvent ( NamedCluster namedCluster ) {
+    for(NamedClusterListener namedClusterListener: nameClusterListeners) {
+      namedClusterListener.onDelete( namedCluster );
+    }
+  }
+
+  private void fireNamedClusterOnUpdateEvent ( NamedCluster namedCluster ) {
+    for(NamedClusterListener namedClusterListener: nameClusterListeners) {
+      namedClusterListener.onUpdate( namedCluster );
+    }
+  }
 
   public BundleContext getBundleContext() {
     return bundleContext;
@@ -118,6 +138,9 @@ public class NamedClusterManager implements NamedClusterService {
   @Override
   public void create( NamedCluster namedCluster, IMetaStore metastore ) throws MetaStoreException {
     getMetaStoreFactory( metastore ).saveElement( new NamedClusterImpl( namedCluster ) );
+
+    // Fire onUpdate event for NamedCluster
+    fireNamedClusterOnUpdateEvent( namedCluster );
   }
 
   @Override
@@ -130,11 +153,18 @@ public class NamedClusterManager implements NamedClusterService {
     MetaStoreFactory<NamedClusterImpl> factory = getMetaStoreFactory( metastore );
     factory.deleteElement( namedCluster.getName() );
     factory.saveElement( new NamedClusterImpl( namedCluster ) );
+
+    // Fire onUpdate event for NamedCluster
+    fireNamedClusterOnUpdateEvent( namedCluster );
   }
 
   @Override
   public void delete( String clusterName, IMetaStore metastore ) throws MetaStoreException {
+    NamedCluster namedCluster = read( clusterName, metastore );
     getMetaStoreFactory( metastore ).deleteElement( clusterName );
+
+    // Fire onDelete event for NamedCluster
+    fireNamedClusterOnDeleteEvent( namedCluster );
   }
 
   @Override

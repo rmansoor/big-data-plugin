@@ -122,4 +122,10 @@ public interface NamedClusterService {
    * @return map with properties for named cluster
    */
   Map<String, Object> getProperties();
+
+  /**
+   * The method adds NamedClusterListener to the list
+   * @param namedClusterListener
+   */
+  void addNamedClusterListener ( NamedClusterListener namedClusterListener );
 }
