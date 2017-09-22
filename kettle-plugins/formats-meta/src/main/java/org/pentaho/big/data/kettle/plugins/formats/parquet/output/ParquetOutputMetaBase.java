@@ -39,6 +39,7 @@ import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.step.BaseStepMeta;
+import org.pentaho.di.trans.step.OutputPathHandlerInterface;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.workarounds.ResolvableResource;
 import org.pentaho.metastore.api.IMetaStore;
@@ -49,7 +50,8 @@ import org.w3c.dom.Node;
  *
  * @author <alexander_buloichik@epam.com>
  */
-public abstract class ParquetOutputMetaBase extends BaseStepMeta implements StepMetaInterface, ResolvableResource {
+public abstract class ParquetOutputMetaBase extends BaseStepMeta implements StepMetaInterface, ResolvableResource,
+    OutputPathHandlerInterface {
 
   @Injection( name = "COMPRESSION" )
   public String compressionType;
@@ -73,12 +75,12 @@ public abstract class ParquetOutputMetaBase extends BaseStepMeta implements Step
     outputFields = new FormatInputOutputField[0];
   }
 
-  public String getFilename() {
+  public String getFileName() {
     return filename;
   }
 
-  public void setFilename( String filename ) {
-    this.filename = filename;
+  public void setFileName( String fileName ) {
+    this.filename = fileName;
   }
 
   @Override

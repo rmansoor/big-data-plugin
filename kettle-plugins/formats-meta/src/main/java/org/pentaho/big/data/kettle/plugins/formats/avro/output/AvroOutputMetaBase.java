@@ -40,6 +40,7 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.step.BaseStepMeta;
+import org.pentaho.di.trans.step.OutputPathHandlerInterface;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
@@ -49,11 +50,11 @@ import org.w3c.dom.Node;
  *
  * @author Alexander Buloichik@epam.com>
  */
-public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMetaInterface {
+public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMetaInterface, OutputPathHandlerInterface {
 
   private static final Class<?> PKG = AvroOutputMetaBase.class;
 
-  private String filename;
+  private String fileName;
 
   private List<FormatInputOutputField> outputFields = new ArrayList<FormatInputOutputField>();
   @Injection( name = FieldNames.COMPRESSION )
@@ -68,12 +69,12 @@ public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMet
     // TODO Auto-generated method stub
   }
 
-  public String getFilename() {
-    return filename;
+  public String getFileName() {
+    return fileName;
   }
 
-  public void setFilename( String filename ) {
-    this.filename = filename;
+  public void setFileName( String fileName ) {
+    this.fileName = fileName;
   }
 
   public List<FormatInputOutputField> getOutputFields() {
@@ -91,7 +92,7 @@ public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMet
 
   private void readData( Node stepnode, IMetaStore metastore ) throws KettleXMLException {
     try {
-      filename = XMLHandler.getTagValue( stepnode, "filename" );
+      fileName = XMLHandler.getTagValue( stepnode, "filename" );
       Node fields = XMLHandler.getSubNode( stepnode, "fields" );
       int nrfields = XMLHandler.countNodes( fields, "field" );
       List<FormatInputOutputField> parquetOutputFields = new ArrayList<>();
@@ -123,7 +124,7 @@ public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMet
     StringBuffer retval = new StringBuffer( 800 );
     final String INDENT = "    ";
 
-    retval.append( INDENT ).append( XMLHandler.addTagValue( "filename", filename ) );
+    retval.append( INDENT ).append( XMLHandler.addTagValue( "filename", fileName ) );
 
     retval.append( "    <fields>" ).append( Const.CR );
     for ( int i = 0; i < outputFields.size(); i++ ) {
@@ -154,7 +155,7 @@ public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMet
   public void readRep( Repository rep, IMetaStore metaStore, ObjectId id_step, List<DatabaseMeta> databases )
       throws KettleException {
     try {
-      filename = rep.getStepAttributeString( id_step, "filename" );
+      fileName = rep.getStepAttributeString( id_step, "filename" );
 
       // using the "type" column to get the number of field rows because "type" is guaranteed not to be null.
       int nrfields = rep.countNrStepAttributes( id_step, "type" );
@@ -186,7 +187,7 @@ public abstract class AvroOutputMetaBase extends BaseStepMeta implements StepMet
   public void saveRep( Repository rep, IMetaStore metaStore, ObjectId id_transformation, ObjectId id_step )
       throws KettleException {
     try {
-      rep.saveStepAttribute( id_transformation, id_step, "filename", filename );
+      rep.saveStepAttribute( id_transformation, id_step, "filename", fileName );
       for ( int i = 0; i < outputFields.size(); i++ ) {
         FormatInputOutputField field = outputFields.get( i );
 
