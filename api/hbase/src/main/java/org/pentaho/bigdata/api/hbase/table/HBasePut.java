@@ -23,6 +23,7 @@
 package org.pentaho.bigdata.api.hbase.table;
 
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Created by bryan on 1/20/16.
@@ -32,6 +33,11 @@ public interface HBasePut {
 
   void addColumn( String columnFamily, String columnName, boolean colNameIsBinary, byte[] colValue ) throws
     IOException;
+
+  void addColumn( String columnFamily, String columnName, boolean colNameIsBinary, long timestamp, byte[] colValue ) throws
+      IOException;
+
+  void setAcl( Map<String, String[]> userPermissions )  throws Exception;
 
   String createColumnName( String... parts );
 

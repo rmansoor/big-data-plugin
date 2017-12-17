@@ -30,6 +30,7 @@ import org.pentaho.bigdata.api.hbase.table.HBasePut;
 import org.pentaho.hbase.shim.api.HBaseValueMeta;
 
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Created by bryan on 1/26/16.
@@ -57,12 +58,37 @@ public class HBasePutImpl implements HBasePut {
     this.writeToWAL = writeToWAL;
   }
 
+  @Override public void setAcl( Map<String, String[]> userPermissions ) throws Exception {
+      batchHBaseConnectionOperation.addOperation( new HBaseConnectionOperation() {
+        @Override public void perform( HBaseConnectionWrapper hBaseConnectionWrapper ) throws IOException {
+          try {
+            hBaseConnectionWrapper.setAclOfTargetPut( userPermissions );
+          } catch ( Exception e ) {
+            throw new IOException( e );
+          }
+        }
+      } );
+    }
+
   @Override public void addColumn( final String columnFamily, final String columnName, final boolean colNameIsBinary, final byte[] colValue )
-    throws IOException {
+      throws IOException {
     batchHBaseConnectionOperation.addOperation( new HBaseConnectionOperation() {
       @Override public void perform( HBaseConnectionWrapper hBaseConnectionWrapper ) throws IOException {
         try {
           hBaseConnectionWrapper.addColumnToTargetPut( columnFamily, columnName, colNameIsBinary, colValue );
+        } catch ( Exception e ) {
+          throw new IOException( e );
+        }
+      }
+    } );
+  }
+
+  @Override public void addColumn( final String columnFamily, final String columnName, final boolean colNameIsBinary, long timestamp, final byte[] colValue )
+    throws IOException {
+    batchHBaseConnectionOperation.addOperation( new HBaseConnectionOperation() {
+      @Override public void perform( HBaseConnectionWrapper hBaseConnectionWrapper ) throws IOException {
+        try {
+          hBaseConnectionWrapper.addColumnToTargetPut( columnFamily, columnName, colNameIsBinary, timestamp, colValue );
         } catch ( Exception e ) {
           throw new IOException( e );
         }

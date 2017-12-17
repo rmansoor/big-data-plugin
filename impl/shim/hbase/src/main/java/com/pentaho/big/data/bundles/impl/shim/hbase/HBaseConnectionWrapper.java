@@ -34,6 +34,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 
@@ -55,6 +56,7 @@ public class HBaseConnectionWrapper extends HBaseConnection {
   @Override public HBaseBytesUtilShim getBytesUtil() throws Exception {
     return delegate.getBytesUtil();
   }
+
 
   @Override public void configureConnection( Properties properties, List<String> list ) throws Exception {
     delegate.configureConnection( properties, list );
@@ -134,6 +136,14 @@ public class HBaseConnectionWrapper extends HBaseConnection {
 
   @Override public void addColumnToTargetPut( String s, String s1, boolean b, byte[] bytes ) throws Exception {
     delegate.addColumnToTargetPut( s, s1, b, bytes );
+  }
+
+  @Override public void addColumnToTargetPut( String s, String s1, boolean b, long timestamp, byte[] bytes ) throws Exception {
+    delegate.addColumnToTargetPut( s, s1, b, timestamp, bytes );
+  }
+
+  @Override public void setAclOfTargetPut( Map<String, String[]> userPermissions ) throws Exception {
+    delegate.setAclOfTargetPut( userPermissions );
   }
 
   @Override public void addColumnFilterToScan( ColumnFilter columnFilter,

@@ -22,6 +22,7 @@
 
 package org.pentaho.big.data.kettle.plugins.hbase.output;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.pentaho.big.data.kettle.plugins.hbase.mapping.MappingUtils;
@@ -31,6 +32,7 @@ import org.pentaho.bigdata.api.hbase.mapping.Mapping.KeyType;
 import org.pentaho.bigdata.api.hbase.meta.HBaseValueMetaInterface;
 import org.pentaho.bigdata.api.hbase.table.HBasePut;
 import org.pentaho.bigdata.api.hbase.table.HBaseTableWriteOperationManager;
+
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
@@ -166,9 +168,18 @@ public class KettleRowToHBaseTuple {
     if ( visibilityIndex >= 0 && !visibilityInMeta.isNull( row[visibilityIndex] ) ) {
       byte[] encodedVisibility = visibilityMeta.encodeColumnValue( row[visibilityIndex], visibilityInMeta );
       put.addColumn( columnFamily, MappingUtils.TUPLE_MAPPING_VISIBILITY, false, encodedVisibility );
+      // Now you can pass the timestamp as long in the addColumn method.
+      //put.addColumn( columnFamily, MappingUtils.TUPLE_MAPPING_VISIBILITY, false, System.currentTimeMillis() , encodedVisibility );
+      System.currentTimeMillis();
     }
+    String userPermission = visibilityMeta.getString( row[visibilityIndex] );
+    // Read the user/group in order words the principal of the permission
+    String principal = userPermission.substring( 0, userPermission.indexOf( '[' ) );
+    String acls = userPermission.substring( userPermission.indexOf( '[' ) +  1, userPermission.indexOf( ']' )- 1 );
+    Map<String, String[]> permissionsMap = new HashMap<String, String[]>(  );
+    permissionsMap.put( principal, acls.split( "," ) );
 
-    put.setWriteToWAL( writeToWAL );
+    put.setAcl( permissionsMap );
     return put;
   }
 
