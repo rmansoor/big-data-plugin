@@ -48,6 +48,7 @@ public class HiveDriver implements Driver {
   private final boolean defaultConfiguration;
   private final JdbcUrlParser jdbcUrlParser;
   private final String hadoopConfigurationId;
+  public static final String URL_OPTIONS_PARAMETER = "url";
 
   public HiveDriver( Driver delegate, String hadoopConfigurationId, boolean defaultConfiguration,
                      JdbcUrlParser jdbcUrlParser ) {
@@ -58,38 +59,62 @@ public class HiveDriver implements Driver {
   }
 
   @Override public Connection connect( String url, Properties info ) throws SQLException {
-    Driver driver = checkBeforeCallActiveDriver( url );
-    JdbcUrl jdbcUrl;
-    try {
-      jdbcUrl = jdbcUrlParser.parse( url );
-    } catch ( URISyntaxException e1 ) {
-      throw new SQLException( "Unable to parse jdbc url: " + url, e1 );
-    }
-    NamedCluster namedCluster;
-    try {
-      namedCluster = jdbcUrl.getNamedCluster();
-    } catch ( Exception e ) {
-      return null;
-    }
-    if ( !acceptsURL( url, driver, namedCluster ) ) {
-      return null;
-    }
-    try {
-      return doConnect( driver, jdbcUrl, info );
-    } catch ( Exception ex ) {
-      Throwable cause = ex;
-      do {
-        // BACKLOG-6547
-        if ( cause instanceof SQLException
-          && SQL_STATE_NOT_SUPPORTED.equals( ( (SQLException) cause ).getSQLState() ) ) {
-          // this means that either driver can't be obtained or does not support connect().
-          // In both cases signal to DriverManager we can't process the URL
-          return null;
-        }
-        cause = cause.getCause();
-      } while ( cause != null );
+    if ( info.containsKey( URL_OPTIONS_PARAMETER ) ) {
+      url = info.getProperty( URL_OPTIONS_PARAMETER );
+      Driver driver = checkBeforeCallActiveDriver( url );
+      if ( !acceptsURL( url, driver, null ) ) {
+        return null;
+      }
+      try {
+        return driver.connect( url, info );
+      } catch ( Exception ex ) {
+        Throwable cause = ex;
+        do {
+          // BACKLOG-6547
+          if ( cause instanceof SQLException
+              && SQL_STATE_NOT_SUPPORTED.equals( ( (SQLException) cause ).getSQLState() ) ) {
+            // this means that either driver can't be obtained or does not support connect().
+            // In both cases signal to DriverManager we can't process the URL
+            return null;
+          }
+          cause = cause.getCause();
+        } while ( cause != null );
+        throw ex;
+      }
+    } else {
+      Driver driver = checkBeforeCallActiveDriver( url );
+      JdbcUrl jdbcUrl;
+      try {
+        jdbcUrl = jdbcUrlParser.parse( url );
+      } catch ( URISyntaxException e1 ) {
+        throw new SQLException( "Unable to parse jdbc url: " + url, e1 );
+      }
+      NamedCluster namedCluster;
+      try {
+        namedCluster = jdbcUrl.getNamedCluster();
+      } catch ( Exception e ) {
+        return null;
+      }
+      if ( !acceptsURL( url, driver, namedCluster ) ) {
+        return null;
+      }
+      try {
+        return doConnect( driver, jdbcUrl, info );
+      } catch ( Exception ex ) {
+        Throwable cause = ex;
+        do {
+          // BACKLOG-6547
+          if ( cause instanceof SQLException
+              && SQL_STATE_NOT_SUPPORTED.equals( ( (SQLException) cause ).getSQLState() ) ) {
+            // this means that either driver can't be obtained or does not support connect().
+            // In both cases signal to DriverManager we can't process the URL
+            return null;
+          }
+          cause = cause.getCause();
+        } while ( cause != null );
 
-      throw ex;
+        throw ex;
+      }
     }
   }
 
