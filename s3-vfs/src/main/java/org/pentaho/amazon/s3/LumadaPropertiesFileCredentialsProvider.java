@@ -20,17 +20,38 @@ package org.pentaho.amazon.s3;
 import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.ClasspathPropertiesFileCredentialsProvider;
+import org.pentaho.di.connections.ConnectionDetails;
+import org.pentaho.di.connections.ConnectionManager;
+import org.pentaho.s3.vfs.S3FileProvider;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 public class LumadaPropertiesFileCredentialsProvider extends ClasspathPropertiesFileCredentialsProvider {
   public static final String SLASH = "/";
   private static String defaultPropertiesFile = "AwsCredentials.properties";
   private final String credentialsFilePath;
+  private Supplier<ConnectionManager> connectionManagerSupplier = ConnectionManager::getInstance;
+
+  private Map<String, String> defaultConfig;
 
   public LumadaPropertiesFileCredentialsProvider() {
-    this( defaultPropertiesFile );
+    this( defaultPropertiesFile ); for ( ConnectionDetails connectionDetails : getConnectionDetails() ) {
+      Map<String, String> properties = connectionDetails.getProperties();
+      if ( properties != null && properties.containsKey( "defaultS3Config" ) ) {
+        String defaultS3Config = properties.get( "defaultS3Config" );
+        if ( defaultS3Config != null && defaultS3Config.equals( "true" ) ) {
+          defaultConfig = properties; break;
+        }
+      }
+    }
+  }
+
+  public List<ConnectionDetails> getConnectionDetails() {
+    return (List<ConnectionDetails>) connectionManagerSupplier.get()
+        .getConnectionDetailsByScheme( S3FileProvider.SCHEME );
   }
 
   public LumadaPropertiesFileCredentialsProvider( String credentialsFilePath ) {
@@ -48,17 +69,17 @@ public class LumadaPropertiesFileCredentialsProvider extends ClasspathProperties
 
   @Override
   public AWSCredentials getCredentials() {
-    InputStream inputStream = this.getClass().getResourceAsStream( this.credentialsFilePath );
+    /*InputStream inputStream = this.getClass().getResourceAsStream( this.credentialsFilePath );
     if ( inputStream == null ) {
       throw new SdkClientException(
         "Unable to load AWS credentials from the " + this.credentialsFilePath + " file on the classpath" );
-    } else {
+    } else {*/
       try {
-        return new LumadaPropertiesCredentials( inputStream );
+        return new LumadaPropertiesCredentials( defaultConfig );
       } catch ( IOException var3 ) {
         throw new SdkClientException(
           "Unable to load AWS credentials from the " + this.credentialsFilePath + " file on the classpath", var3 );
       }
-    }
+    /*}*/
   }
 }

@@ -26,7 +26,12 @@ selectbox#region .options {
 }
 
 .radio-button-label {
-  display: inline;
+    display: inline;
+}
+
+.check-box-class {
+    vertical-align: middle;
+    position: relative;
 }
 
 

@@ -73,14 +73,13 @@ public class S3Details implements VFSConnectionDetails {
   @MetaStoreAttribute
   private String profileName;
 
-  @MetaStoreAttribute
-  private String endpoint;
+  @MetaStoreAttribute private String endpoint;
 
-  @MetaStoreAttribute
-  private String pathStyleAccess;
+  @MetaStoreAttribute private String pathStyleAccess;
 
-  @MetaStoreAttribute
-  private String signatureVersion;
+  @MetaStoreAttribute private String signatureVersion;
+
+  @MetaStoreAttribute private String defaultS3Config;
 
   @Override public String getName() {
     return name;
@@ -199,21 +198,25 @@ public class S3Details implements VFSConnectionDetails {
     this.pathStyleAccess = pathStyleAccess;
   }
 
+  public String getDefaultS3Config() {
+    return defaultS3Config;
+  }
+
+  public void setDefaultS3Config( String defaultS3Config ) {
+    this.defaultS3Config = defaultS3Config;
+  }
+
   @Override public Map<String, String> getProperties() {
-    Map<String, String> props = new HashMap<>();
-    props.put( "name", getName() );
-    props.put( "description", getDescription() );
-    props.put( "accessKey", getAccessKey() );
-    props.put( "secretKey", getSecretKey() );
-    props.put( "sessionToken", getSessionToken() );
-    props.put( "credentialsFilePath", getCredentialsFilePath() );
-    props.put( "credentialsFile", getCredentialsFile() );
+    Map<String, String> props = new HashMap<>(); props.put( "name", getName() );
+    props.put( "description", getDescription() ); props.put( "accessKey", getAccessKey() );
+    props.put( "secretKey", getSecretKey() ); props.put( "sessionToken", getSessionToken() );
+    props.put( "credentialsFilePath", getCredentialsFilePath() ); props.put( "credentialsFile", getCredentialsFile() );
     props.put( "authType", getAuthType() );
     props.put( "region", getRegion() );
     props.put( "profileName", getProfileName() );
     props.put( "endpoint", getEndpoint() );
-    props.put( "signatureVersion", getSignatureVersion() );
-    props.put( "pathStyleAccess", getPathStyleAccess() );
+    props.put( "signatureVersion", getSignatureVersion() ); props.put( "pathStyleAccess", getPathStyleAccess() );
+    props.put( "defaultS3Config", getDefaultS3Config() );
 
     return props;
   }
