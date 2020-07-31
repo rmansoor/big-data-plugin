@@ -18,29 +18,27 @@
 package org.pentaho.amazon.s3;
 
 import com.amazonaws.auth.AWSCredentials;
+import org.pentaho.di.core.encryption.Encr;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
+import java.util.Map;
 
 public class LumadaPropertiesCredentials implements AWSCredentials {
   private static final Logger logger = LoggerFactory.getLogger( LumadaPropertiesCredentials.class );
 
   public static final String ACCESS_KEY = "accessKey";
   public static final String SECRET_KEY = "secretKey";
-  public static final String ENDPOINT_URL = "endpointUrl";
-  public static final String API_SIGNATURE = "apiSignature";
+  public static final String ENDPOINT_URL = "endpoint";
+  public static final String API_SIGNATURE = "signatureVersion";
   private final String accessKey;
   private final String secretAccessKey;
   private final String endpointUrl;
   private final String apiSignature;
 
-  public LumadaPropertiesCredentials( File file ) throws IOException {
+  public LumadaPropertiesCredentials( Map<String, String> accountProperties ) throws IOException {
+    /*
     if ( !file.exists() ) {
       throw new FileNotFoundException( "File doesn't exist:  " + file.getAbsolutePath() );
     } else {
@@ -54,16 +52,16 @@ public class LumadaPropertiesCredentials implements AWSCredentials {
           throw new IllegalArgumentException( "The specified file (" + file.getAbsolutePath()
             + ") doesn't contain the expected properties 'accessKey' and 'secretKey'." );
         }
-
-        this.accessKey = accountProperties.getProperty( ACCESS_KEY );
-        this.secretAccessKey = accountProperties.getProperty( SECRET_KEY );
-        this.endpointUrl = accountProperties.getProperty( ENDPOINT_URL );
-        this.apiSignature = accountProperties.getProperty( API_SIGNATURE );
-      }
-    }
+*/
+    this.accessKey = Encr.decryptPasswordOptionallyEncrypted( accountProperties.get( ACCESS_KEY ) );
+    this.secretAccessKey = Encr.decryptPasswordOptionallyEncrypted( accountProperties.get( SECRET_KEY ) );
+    this.endpointUrl = accountProperties.get( ENDPOINT_URL );
+    this.apiSignature = accountProperties.get( API_SIGNATURE );
+    /*  }
+    }*/
   }
 
-  public LumadaPropertiesCredentials( InputStream inputStream ) throws IOException {
+/*  public LumadaPropertiesCredentials( InputStream inputStream ) throws IOException {
     Properties accountProperties = new Properties();
 
     try {
@@ -90,7 +88,7 @@ public class LumadaPropertiesCredentials implements AWSCredentials {
         "The specified properties data doesn't contain the expected properties 'accessKey', 'secretKey', "
           + "'endpointUrl', and 'apiSignature'." );
     }
-  }
+  }*/
 
   public String getAWSAccessKeyId() {
     return this.accessKey;
