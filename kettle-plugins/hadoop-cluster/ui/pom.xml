@@ -98,10 +98,12 @@
     <dependency>
       <groupId>pentaho</groupId>
       <artifactId>pentaho-i18n-bundle</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
       <artifactId>pentaho-i18n-webservice-bundle</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
