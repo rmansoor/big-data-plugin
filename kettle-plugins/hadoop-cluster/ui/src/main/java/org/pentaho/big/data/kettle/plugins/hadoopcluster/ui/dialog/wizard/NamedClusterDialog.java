@@ -24,7 +24,6 @@ import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.pages.
 import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.pages.TestResultsPage;
 import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.util.BadSiteFilesException;
 import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.util.CustomWizardDialog;
-import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.endpoints.CachedFileItemStream;
 import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.endpoints.HadoopClusterManager;
 import org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.model.ThinNameClusterModel;
 import org.pentaho.big.data.plugins.common.ui.ClusterTestDialog;
@@ -44,6 +43,7 @@ import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.spoon.Spoon;
 import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.pentaho.hadoop.shim.api.cluster.NamedClusterService;
+import org.pentaho.hadoop.shim.api.internal.ShimIdentifier;
 import org.pentaho.metastore.api.IMetaStore;
 import org.pentaho.runtime.test.RuntimeTestStatus;
 import org.pentaho.runtime.test.RuntimeTester;
@@ -56,7 +56,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import static org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.pages.SecuritySettingsPage.NamedClusterSecurityType.NONE;
-import static org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.util.NamedClusterHelper.processSiteFiles;
+import static org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard.util.NamedClusterHelper.getShimIdentifier;
 
 /*
  * To run this dialog as stand alone for development purposes under UBUNTU do the following:
@@ -128,8 +128,7 @@ public class NamedClusterDialog extends Wizard {
       isCreatingCluster = true;
     }
     model.setName( model.getName() == null ? "" : model.getName() );
-    model.setShimVendor( model.getShimVendor() == null ? "" : model.getShimVendor() );
-    model.setShimVersion( model.getShimVersion() == null ? "" : model.getShimVersion() );
+    model.setShimIdentifier( model.getShimIdentifier() == null ? "" : model.getShimIdentifier() );
     model.setHdfsHost( model.getHdfsHost() == null ? "" : model.getHdfsHost() );
     model.setHdfsPort( model.getHdfsPort() == null && isCreatingCluster? "8020" : model.getHdfsPort() == null ? "" : model.getHdfsPort() );
     model.setHdfsUsername( model.getHdfsUsername() == null ? "" : model.getHdfsUsername() );
@@ -225,6 +224,12 @@ public class NamedClusterDialog extends Wizard {
 
   public boolean performFinish() {
     boolean finish = false;
+    // We are about to either create or edit hadoop cluster. Send shim identifier to the currently loaded driver
+    ShimIdentifier shimIdentifier = getShimIdentifier();
+    if ( shimIdentifier != null ) {
+      thinNameClusterModel.setShimIdentifier( shimIdentifier.getId() );
+    }
+
     String currentPage = super.getContainer().getCurrentPage().getName();
     if ( reportPage != null && !currentPage.equals( reportPage.getClass().getSimpleName() ) &&
       !currentPage.equals( testResultsPage.getClass().getSimpleName() ) ) {
