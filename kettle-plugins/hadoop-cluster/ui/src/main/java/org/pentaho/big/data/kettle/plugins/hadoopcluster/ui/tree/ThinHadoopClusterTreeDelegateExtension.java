@@ -13,12 +13,12 @@
 
 package org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.tree;
 
-import org.pentaho.di.core.namedcluster.NamedClusterManager;
+import org.pentaho.big.data.impl.cluster.NamedClusterManager;
 import org.pentaho.di.base.AbstractMeta;
 import org.pentaho.di.core.extension.ExtensionPoint;
 import org.pentaho.di.core.extension.ExtensionPointInterface;
 import org.pentaho.di.core.logging.LogChannelInterface;
-import org.pentaho.di.core.namedcluster.model.NamedCluster;
+import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.pentaho.di.ui.spoon.Spoon;
 import org.pentaho.di.ui.spoon.TreeSelection;
 import org.pentaho.di.ui.spoon.delegates.SpoonTreeDelegateExtension;

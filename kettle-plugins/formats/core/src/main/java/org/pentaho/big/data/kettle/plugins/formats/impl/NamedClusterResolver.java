@@ -35,7 +35,7 @@ public class NamedClusterResolver {
 
   private NamedClusterResolver() {
     this( BigDataServicesHelper.getNamedClusterServiceLocator(),
-      NamedClusterManager.getInstance() );
+      BigDataServicesHelper.getNamedClusterService() );
   }
 
   private NamedClusterResolver( NamedClusterServiceLocator namedClusterServiceLocator,

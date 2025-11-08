@@ -15,8 +15,8 @@ package org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.tree;
 
 import org.eclipse.swt.graphics.Image;
 import org.pentaho.di.base.AbstractMeta;
-import org.pentaho.di.core.namedcluster.NamedClusterManager;
-import org.pentaho.di.core.namedcluster.model.NamedCluster;
+import org.pentaho.big.data.impl.cluster.NamedClusterManager;
+import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.ui.core.ConstUI;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;

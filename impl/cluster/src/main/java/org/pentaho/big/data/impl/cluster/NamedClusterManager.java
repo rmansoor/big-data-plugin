@@ -18,7 +18,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.FileType;
-import org.osgi.framework.BundleContext;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.attributes.metastore.EmbeddedMetaStore;
@@ -32,7 +31,6 @@ import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
-import org.pentaho.di.trans.steps.named.cluster.NamedClusterEmbedManager;
 import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.pentaho.hadoop.shim.api.cluster.NamedClusterService;
 import org.pentaho.metastore.api.IMetaStore;
@@ -95,7 +93,7 @@ public class NamedClusterManager implements NamedClusterService {
 
     // cache MetaStoreFactories for Embedded MetaStores
     namedClusterMetaStoreFactory = factoryMap.computeIfAbsent( metastore,
-      m -> ( new MetaStoreFactory<>( NamedClusterImpl.class, m, NamedClusterEmbedManager.NAMESPACE ) ) );
+      m -> ( new MetaStoreFactory<>( NamedClusterImpl.class, m, "NamedClusters" ) ) );
 
     return namedClusterMetaStoreFactory;
   }
