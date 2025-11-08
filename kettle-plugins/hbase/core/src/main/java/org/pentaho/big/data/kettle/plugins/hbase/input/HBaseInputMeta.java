@@ -183,7 +183,7 @@ public class HBaseInputMeta extends BaseStepMeta implements StepMetaInterface {
   private ServiceStatus serviceStatus = ServiceStatus.OK;
 
   public HBaseInputMeta() {
-    this( NamedClusterManager.getInstance(), BigDataServicesHelper.getNamedClusterServiceLocator(),
+    this( BigDataServicesHelper.getNamedClusterService(), BigDataServicesHelper.getNamedClusterServiceLocator(),
       RuntimeTestActionServiceImpl.getInstance(), RuntimeTesterImpl.getInstance() );
   }
 

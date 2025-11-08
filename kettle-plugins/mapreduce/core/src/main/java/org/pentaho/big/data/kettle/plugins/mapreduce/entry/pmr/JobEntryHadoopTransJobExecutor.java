@@ -149,7 +149,7 @@ public class JobEntryHadoopTransJobExecutor extends JobEntryBase implements Clon
   }
 
   public JobEntryHadoopTransJobExecutor() {
-    this.namedClusterService = NamedClusterManager.getInstance();
+    this.namedClusterService = BigDataServicesHelper.getNamedClusterService();
     this.runtimeTester = RuntimeTesterImpl.getInstance();
     this.runtimeTestActionService = RuntimeTestActionServiceImpl.getInstance();
     this.namedClusterServiceLocator = BigDataServicesHelper.getNamedClusterServiceLocator();

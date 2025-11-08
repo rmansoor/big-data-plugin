@@ -16,7 +16,6 @@ package org.pentaho.big.data.kettle.plugins.oozie;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang.StringUtils;
 import org.pentaho.big.data.api.services.BigDataServicesHelper;
-import org.pentaho.big.data.impl.cluster.NamedClusterManager;
 import org.pentaho.big.data.kettle.plugins.job.AbstractJobEntry;
 import org.pentaho.big.data.kettle.plugins.job.JobEntryMode;
 import org.pentaho.big.data.kettle.plugins.job.JobEntryUtils;
@@ -42,7 +41,6 @@ import org.pentaho.metastore.api.exceptions.MetaStoreException;
 import org.pentaho.runtime.test.RuntimeTester;
 import org.pentaho.runtime.test.action.RuntimeTestActionService;
 import org.pentaho.runtime.test.action.impl.RuntimeTestActionServiceImpl;
-import org.pentaho.big.data.api.cluster.service.locator.impl.NamedClusterServiceLocatorImpl;
 import org.pentaho.runtime.test.impl.RuntimeTesterImpl;
 
 
@@ -76,7 +74,7 @@ public class OozieJobExecutorJobEntry extends AbstractJobEntry<OozieJobExecutorC
   private HadoopClientServices hadoopClientServices = null;
 
   public OozieJobExecutorJobEntry() {
-    this.namedClusterService = NamedClusterManager.getInstance();
+    this.namedClusterService = BigDataServicesHelper.getNamedClusterService();
     this.runtimeTester = RuntimeTesterImpl.getInstance();
     this.runtimeTestActionService = RuntimeTestActionServiceImpl.getInstance();
     this.namedClusterServiceLocator = BigDataServicesHelper.getNamedClusterServiceLocator();

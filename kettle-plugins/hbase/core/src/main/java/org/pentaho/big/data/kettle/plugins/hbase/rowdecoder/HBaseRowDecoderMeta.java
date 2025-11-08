@@ -114,7 +114,7 @@ public class HBaseRowDecoderMeta extends BaseStepMeta implements StepMetaInterfa
   private final NamedClusterLoadSaveUtil namedClusterLoadSaveUtil;
 
   public HBaseRowDecoderMeta() {
-    this( BigDataServicesHelper.getNamedClusterServiceLocator(), NamedClusterManager.getInstance(),
+    this( BigDataServicesHelper.getNamedClusterServiceLocator(), BigDataServicesHelper.getNamedClusterService(),
       RuntimeTestActionServiceImpl.getInstance(), RuntimeTesterImpl.getInstance() );
   }
 

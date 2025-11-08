@@ -76,12 +76,12 @@ public abstract class AbstractSqoopJobEntry<S extends SqoopConfig> extends Abstr
   private DatabaseMeta usedDbConnection;
 
   /**
-   * Log4j appender that redirects all Log4j logging to a Kettle {@link org.pentaho.di.core.logging.LogChannel}
+   * Log4j appender that redirects all Log4j logging to a Kettle {@link LogChannel}
    */
   private Appender sqoopToKettleAppender;
 
   /**
-   * Logging proxy that redirects all {@link java.io.PrintStream} output to a Log4j logger.
+   * Logging proxy that redirects all {@link PrintStream} output to a Log4j logger.
    */
   private LoggingProxy stdErrProxy;
 

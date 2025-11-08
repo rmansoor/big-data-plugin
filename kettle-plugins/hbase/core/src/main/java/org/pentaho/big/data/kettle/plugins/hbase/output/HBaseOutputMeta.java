@@ -157,7 +157,7 @@ public class HBaseOutputMeta extends BaseStepMeta implements StepMetaInterface {
   }
 
   public HBaseOutputMeta() {
-    this( NamedClusterManager.getInstance(), BigDataServicesHelper.getNamedClusterServiceLocator(),
+    this( BigDataServicesHelper.getNamedClusterService(), BigDataServicesHelper.getNamedClusterServiceLocator(),
       RuntimeTestActionServiceImpl.getInstance(), RuntimeTesterImpl.getInstance(), new NamedClusterLoadSaveUtil(), null );
   }
 

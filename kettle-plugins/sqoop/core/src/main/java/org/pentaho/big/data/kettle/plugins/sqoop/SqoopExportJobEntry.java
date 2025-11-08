@@ -49,7 +49,7 @@ public class SqoopExportJobEntry extends AbstractSqoopJobEntry<SqoopExportConfig
   private transient DatabaseMeta databaseMeta;
 
   public SqoopExportJobEntry() {
-    super( NamedClusterManager.getInstance(),
+    super(BigDataServicesHelper.getNamedClusterService(),
             BigDataServicesHelper.getNamedClusterServiceLocator(),
       RuntimeTestActionServiceImpl.getInstance(), RuntimeTesterImpl.getInstance() );
   }

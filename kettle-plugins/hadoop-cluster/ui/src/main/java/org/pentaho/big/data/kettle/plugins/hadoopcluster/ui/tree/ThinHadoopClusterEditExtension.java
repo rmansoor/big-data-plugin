@@ -19,10 +19,10 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.extension.ExtensionPoint;
 import org.pentaho.di.core.extension.ExtensionPointInterface;
 import org.pentaho.di.core.logging.LogChannelInterface;
-import org.pentaho.di.core.namedcluster.model.NamedCluster;
 import org.pentaho.di.ui.spoon.SelectionTreeExtension;
 import org.pentaho.di.ui.spoon.Spoon;
 import org.pentaho.runtime.test.impl.RuntimeTesterImpl;
+import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -13,8 +13,8 @@
 
 package org.pentaho.di.ui.repository.repositoryexplorer.model;
 
-import org.pentaho.di.core.namedcluster.model.NamedCluster;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 
 import java.lang.reflect.Constructor;
 
@@ -35,7 +35,7 @@ public class UINamedClusterObjectRegistry {
     return instance;
   }
 
-  public UINamedCluster constructUINamedCluster( NamedCluster namedCluster, Repository rep ) throws UIObjectCreationException {
+  public UINamedCluster constructUINamedCluster(NamedCluster namedCluster, Repository rep ) throws UIObjectCreationException {
     try {
       Constructor<?> constructor = namedClusterClass.getConstructor( NamedCluster.class, Repository.class );
       if ( constructor != null ) {

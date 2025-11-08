@@ -15,15 +15,13 @@ package org.pentaho.big.data.kettle.plugins.sqoop;
 
 import org.pentaho.big.data.api.services.BigDataServicesHelper;
 import org.pentaho.hadoop.shim.api.cluster.NamedClusterService;
-import org.pentaho.hadoop.shim.api.cluster.NamedClusterServiceLocator;
 import org.pentaho.di.core.annotations.JobEntry;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.hadoop.shim.api.cluster.NamedClusterServiceLocator;
 import org.pentaho.runtime.test.RuntimeTester;
 import org.pentaho.runtime.test.action.RuntimeTestActionService;
 import org.pentaho.runtime.test.action.impl.RuntimeTestActionServiceImpl;
 import org.pentaho.runtime.test.impl.RuntimeTesterImpl;
-import org.pentaho.big.data.impl.cluster.NamedClusterManager;
-import org.pentaho.big.data.api.cluster.service.locator.impl.NamedClusterServiceLocatorImpl;
 
 import java.util.Properties;
 
@@ -37,7 +35,7 @@ import java.util.Properties;
 public class SqoopImportJobEntry extends AbstractSqoopJobEntry<SqoopImportConfig> {
 
   public SqoopImportJobEntry() {
-    super( NamedClusterManager.getInstance(),
+    super( BigDataServicesHelper.getNamedClusterService(),
             BigDataServicesHelper.getNamedClusterServiceLocator(),
       RuntimeTestActionServiceImpl.getInstance(), RuntimeTesterImpl.getInstance() );
   }
