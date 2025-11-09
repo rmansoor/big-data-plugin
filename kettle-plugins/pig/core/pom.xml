@@ -82,12 +82,6 @@
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
-      <artifactId>pentaho-big-data-legacy-core</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>pentaho</groupId>
       <artifactId>pentaho-big-data-legacy</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
@@ -128,6 +122,12 @@
       <groupId>org.apache.pig</groupId>
       <artifactId>pig</artifactId>
       <version>0.8.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>pentaho</groupId>
+      <artifactId>pentaho-big-data-legacy</artifactId>
+      <version>${project.version}</version>
       <scope>compile</scope>
     </dependency>
   </dependencies>

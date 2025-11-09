@@ -12,7 +12,6 @@
 package org.pentaho.big.data.kettle.plugins.formats.impl;
 
 import org.pentaho.big.data.api.services.BigDataServicesHelper;
-import org.pentaho.big.data.impl.cluster.NamedClusterManager;
 import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.service.PluginServiceLoader;
