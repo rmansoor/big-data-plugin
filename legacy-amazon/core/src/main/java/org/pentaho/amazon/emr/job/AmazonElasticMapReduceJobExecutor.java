@@ -148,6 +148,7 @@ public class AmazonElasticMapReduceJobExecutor extends AbstractAmazonJobExecutor
     ec2SubnetId = XMLHandler.getTagValue( entrynode, "ec2_subnet_id" );
     alive = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "alive" ) );
     runOnNewCluster = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "runOnNewCluster" ) );
+    shutdownCluster = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "shutdownCluster" ) );
     blocking = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "blocking" ) );
     loggingInterval = XMLHandler.getTagValue( entrynode, "logging_interval" );
   }
@@ -177,6 +178,7 @@ public class AmazonElasticMapReduceJobExecutor extends AbstractAmazonJobExecutor
     retval.append( "      " ).append( XMLHandler.addTagValue( "ec2_subnet_id", ec2SubnetId ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "alive", alive ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "runOnNewCluster", runOnNewCluster ) );
+    retval.append( "      " ).append( XMLHandler.addTagValue( "shutdownCluster", shutdownCluster ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "blocking", blocking ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "logging_interval", loggingInterval ) );
 
@@ -210,6 +212,7 @@ public class AmazonElasticMapReduceJobExecutor extends AbstractAmazonJobExecutor
       setEc2SubnetId( rep.getJobEntryAttributeString( id_jobentry, "ec2_subnet_id" ) );
       setAlive( rep.getJobEntryAttributeBoolean( id_jobentry, "alive" ) );
       setRunOnNewCluster( rep.getJobEntryAttributeBoolean( id_jobentry, "runOnNewCluster" ) );
+      setShutdownCluster( rep.getJobEntryAttributeBoolean( id_jobentry, "shutdownCluster" ) );
       setBlocking( rep.getJobEntryAttributeBoolean( id_jobentry, "blocking" ) );
       setLoggingInterval( rep.getJobEntryAttributeString( id_jobentry, "logging_interval" ) );
 
@@ -245,6 +248,7 @@ public class AmazonElasticMapReduceJobExecutor extends AbstractAmazonJobExecutor
       rep.saveJobEntryAttribute( id_job, getObjectId(), "ec2_subnet_id", ec2SubnetId );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "alive", alive );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "runOnNewCluster", runOnNewCluster );
+      rep.saveJobEntryAttribute( id_job, getObjectId(), "shutdownCluster", shutdownCluster );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "blocking", blocking );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "logging_interval", loggingInterval );
 

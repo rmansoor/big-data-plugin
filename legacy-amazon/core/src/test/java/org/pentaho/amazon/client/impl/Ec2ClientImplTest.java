@@ -9,7 +9,6 @@
  *
  * Change Date: 2029-07-20
  ******************************************************************************/
-
 package org.pentaho.amazon.client.impl;
 
 import com.amazonaws.services.ec2.AmazonEC2;
@@ -17,13 +16,18 @@ import com.amazonaws.services.ec2.model.DescribeSubnetsRequest;
 import com.amazonaws.services.ec2.model.DescribeSubnetsResult;
 import com.amazonaws.services.ec2.model.Subnet;
 import com.amazonaws.services.ec2.model.Tag;
+
 import java.lang.reflect.Field;
 import java.util.List;
+
 import static org.junit.Assert.*;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+
 import static org.mockito.Mockito.*;
+
 import org.pentaho.amazon.client.api.Ec2Client;
 
 /**
@@ -38,7 +42,7 @@ public class Ec2ClientImplTest {
   public void setUp() throws Exception {
     mockEc2Client = mock( AmazonEC2.class );
     ec2Client = new Ec2ClientImpl( "accessKey", "secretKey", "", "US East (N. Virginia)" );
-    
+
     // Inject mock EC2 client using reflection
     Field ec2ClientField = Ec2ClientImpl.class.getDeclaredField( "ec2Client" );
     ec2ClientField.setAccessible( true );
@@ -86,10 +90,10 @@ public class Ec2ClientImplTest {
     assertEquals( "Test Subnet 1", subnet1Info.getSubnetName() );
 
     // Verify the request has the correct filter
-    ArgumentCaptor<DescribeSubnetsRequest> requestCaptor = 
-      ArgumentCaptor.forClass( DescribeSubnetsRequest.class );
+    ArgumentCaptor<DescribeSubnetsRequest> requestCaptor
+      = ArgumentCaptor.forClass( DescribeSubnetsRequest.class );
     verify( mockEc2Client ).describeSubnets( requestCaptor.capture() );
-    
+
     DescribeSubnetsRequest capturedRequest = requestCaptor.getValue();
     assertNotNull( "Request should have filters", capturedRequest.getFilters() );
     assertEquals( "Should have one filter", 1, capturedRequest.getFilters().size() );
@@ -121,8 +125,8 @@ public class Ec2ClientImplTest {
     Ec2Client.SubnetInfo subnetInfo = subnets.get( 0 );
     assertEquals( "subnet-12345", subnetInfo.getSubnetId() );
     // When no Name tag exists, getSubnetName() returns the subnet ID as fallback
-    assertEquals( "Subnet name should fallback to subnet ID when no Name tag", 
-                  "subnet-12345", subnetInfo.getSubnetName() );
+    assertEquals( "Subnet name should fallback to subnet ID when no Name tag",
+      "subnet-12345", subnetInfo.getSubnetName() );
     assertEquals( "vpc-12345", subnetInfo.getVpcId() );
   }
 
@@ -173,8 +177,8 @@ public class Ec2ClientImplTest {
     String displayString = subnetInfo.getDisplayString();
 
     // Assert
-    assertEquals( "Test Subnet (subnet-12345) - AZ: us-east-1a - CIDR: 10.0.1.0/24", 
-                  displayString );
+    assertEquals( "Test Subnet (subnet-12345) - AZ: us-east-1a - CIDR: 10.0.1.0/24",
+      displayString );
   }
 
   @Test
@@ -193,8 +197,8 @@ public class Ec2ClientImplTest {
     String displayString = subnetInfo.getDisplayString();
 
     // Assert
-    assertEquals( "subnet-12345 - AZ: us-east-1a - CIDR: 10.0.1.0/24", 
-                  displayString );
+    assertEquals( "subnet-12345 - AZ: us-east-1a - CIDR: 10.0.1.0/24",
+      displayString );
   }
 
   @Test
@@ -213,8 +217,8 @@ public class Ec2ClientImplTest {
     String displayString = subnetInfo.getDisplayString();
 
     // Assert
-    assertEquals( "subnet-12345 - AZ: us-east-1a - CIDR: 10.0.1.0/24", 
-                  displayString );
+    assertEquals( "subnet-12345 - AZ: us-east-1a - CIDR: 10.0.1.0/24",
+      displayString );
   }
 
   @Test
@@ -247,7 +251,7 @@ public class Ec2ClientImplTest {
       .withAvailabilityZone( "us-east-1a" )
       .withCidrBlock( "10.0.1.0/24" )
       .withState( "available" )
-      .withTags( 
+      .withTags(
         new Tag( "Environment", "Production" ),
         new Tag( "Name", "Prod Subnet" ),
         new Tag( "Owner", "DevOps" )

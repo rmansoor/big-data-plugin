@@ -20,7 +20,9 @@ import org.apache.commons.vfs2.FileSystemOptions;
 import org.apache.commons.vfs2.auth.StaticUserAuthenticator;
 import org.apache.commons.vfs2.impl.DefaultFileSystemConfigBuilder;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTException;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
@@ -55,6 +57,7 @@ import org.pentaho.ui.xul.binding.Binding;
 import org.pentaho.ui.xul.binding.BindingConvertor;
 import org.pentaho.ui.xul.binding.BindingFactory;
 import org.pentaho.ui.xul.components.XulButton;
+import org.pentaho.ui.xul.components.XulCheckbox;
 import org.pentaho.ui.xul.components.XulMenuList;
 import org.pentaho.ui.xul.components.XulRadio;
 import org.pentaho.ui.xul.components.XulRadioGroup;
@@ -97,6 +100,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
   public static final String CMD_LINE_ARGS = "commandLineArgs";
   public static final String BLOCKING = "blocking";
   public static final String RUN_ON_NEW_CLUSTER = "runOnNewCluster";
+  public static final String SHUTDOWN_CLUSTER = "shutdownCluster";
   public static final String LOGGING_INTERVAL = "loggingInterval";
   public static final String ALIVE = "alive";
 
@@ -119,6 +123,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
   public static final String XUL_COMMAND_LINE_ARGUMENTS = "command-line-arguments";
   public static final String XUL_NUM_INSTANCES = "num-instances";
   public static final String XUL_BLOCKING = "blocking";
+  public static final String XUL_SHUTDOWN_CLUSTER = "shutdown-cluster";
   public static final String XUL_LOGGING_INTERVAL1 = "logging-interval";
   public static final String XUL_ALIVE = "alive";
   public static final String XUL_AMAZON_EMR_JOB_ENTRY_DIALOG = "amazon-emr-job-entry-dialog";
@@ -165,6 +170,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
   protected String commandLineArgs;
   protected boolean blocking;
   protected boolean runOnNewCluster;
+  protected boolean shutdownCluster = false;
   protected String loggingInterval = "60"; // 60 seconds
 
   protected VfsFileChooserDialog fileChooserDialog;
@@ -366,6 +372,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
     bindingFactory.createBinding( XUL_NUM_INSTANCES, "value", this, NUM_INSTANCES );
     bindingFactory.createBinding( XUL_ALIVE, "selected", this, ALIVE );
     bindingFactory.createBinding( XUL_BLOCKING, "selected", this, BLOCKING );
+    bindingFactory.createBinding( XUL_SHUTDOWN_CLUSTER, "selected", this, SHUTDOWN_CLUSTER );
     bindingFactory.createBinding( XUL_LOGGING_INTERVAL1, "value", this, LOGGING_INTERVAL );
 
     bindingFactory.setBindingType( Binding.Type.ONE_WAY );
@@ -915,6 +922,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
     getJobEntry().setCmdLineArgs( getCommandLineArgs() );
     getJobEntry().setAlive( isAlive() );
     getJobEntry().setRunOnNewCluster( isRunOnNewCluster() );
+    getJobEntry().setShutdownCluster( getShutdownCluster() );
     getJobEntry().setBlocking( getBlocking() );
     getJobEntry().setLoggingInterval( getLoggingInterval() );
 
@@ -1166,6 +1174,7 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
       setRunOnNewCluster( getJobEntry().isRunOnNewCluster() );
       setBlocking( getJobEntry().getBlocking() );
       setAlive( getJobEntry().getAlive() );
+      setShutdownCluster( getJobEntry().getShutdownCluster() );
       setLoggingInterval( getJobEntry().getLoggingInterval() );
     }
   }
@@ -1616,6 +1625,39 @@ public abstract class AbstractAmazonJobExecutorController extends AbstractXulEve
 
   public void invertAlive() {
     setAlive( !isAlive() );
+  }
+
+  public boolean getShutdownCluster() {
+    return shutdownCluster;
+  }
+
+  public void setShutdownCluster( boolean shutdownCluster ) {
+    boolean previousVal = this.shutdownCluster;
+    this.shutdownCluster = shutdownCluster;
+    firePropertyChange( SHUTDOWN_CLUSTER, previousVal, shutdownCluster );
+  }
+
+  public void toggleShutdownCluster() {
+    if ( shutdownCluster ) {
+      // User is unchecking - no confirmation needed, just disable
+      setShutdownCluster( false );
+    } else {
+      // User is trying to enable shutdown - show confirmation
+      MessageBox mb = new MessageBox( Display.getDefault().getActiveShell(), SWT.OK | SWT.CANCEL | SWT.ICON_WARNING );
+      mb.setText( BaseMessages.getString( getJobEntry().getClass(),
+        getJobEntry().getClass().getSimpleName() + ".ShutdownCluster.Confirmation.Title" ) );
+      mb.setMessage( BaseMessages.getString( getJobEntry().getClass(),
+        getJobEntry().getClass().getSimpleName() + ".ShutdownCluster.Confirmation.Message" ) );
+      int answer = mb.open();
+      if ( answer == SWT.OK ) {
+        setShutdownCluster( true );
+      } else {
+        // User cancelled (or dialog failed) - keep model state false. Updating the model
+        // will propagate to the UI through the existing binding, avoiding direct widget manipulation
+        // which can cause SWTExceptions when controls are being disposed.
+        setShutdownCluster( false );
+      }
+    }
   }
 
   public FileObject resolveFile( Bowl bowl, String fileUri ) throws FileSystemException, KettleFileException {

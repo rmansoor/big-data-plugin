@@ -9,8 +9,6 @@
  *
  * Change Date: 2029-07-20
  ******************************************************************************/
-
-
 package org.pentaho.amazon.client.impl;
 
 import com.amazonaws.services.elasticmapreduce.AmazonElasticMapReduce;
@@ -56,6 +54,7 @@ import java.util.stream.Collectors;
  * Created by Aliaksandr_Zhuk on 2/5/2018.
  */
 public class EmrClientImpl implements EmrClient {
+
   private static final String EMR_EC2_DEFAULT_ROLE = "EMR_EC2_DefaultRole";
   private static final String EMR_EFAULT_ROLE = "EMR_DefaultRole";
 
@@ -70,6 +69,8 @@ public class EmrClientImpl implements EmrClient {
   private String stepId;
   private List<StepSummary> stepSummaries = null;
   private boolean alive;
+  private boolean runOnNewCluster = true;
+  private boolean shutdownCluster = false;
   private boolean requestClusterShutdown = false;
   private boolean requestStepCancell = false;
 
@@ -84,9 +85,11 @@ public class EmrClientImpl implements EmrClient {
   ) {
 
     this.setAlive( jobEntry.getAlive() );
+    this.runOnNewCluster = true; // Running on a new cluster
+    this.shutdownCluster = jobEntry.getShutdownCluster();
 
-    RunJobFlowRequest runJobFlowRequest =
-      initEmrCluster( stagingS3FileUrl, stagingS3BucketUrl, stepType, mainClass, bootstrapActions, jobEntry );
+    RunJobFlowRequest runJobFlowRequest
+      = initEmrCluster( stagingS3FileUrl, stagingS3BucketUrl, stepType, mainClass, bootstrapActions, jobEntry );
 
     runJobFlowResult = emrClient.runJobFlow( runJobFlowRequest );
     hadoopJobFlowId = runJobFlowResult.getJobFlowId();
@@ -108,6 +111,8 @@ public class EmrClientImpl implements EmrClient {
                                         String mainClass,
                                         AbstractAmazonJobEntry jobEntry ) {
     this.setAlive( jobEntry.getAlive() );
+    this.runOnNewCluster = false; // Running on an existing cluster
+    this.shutdownCluster = jobEntry.getShutdownCluster();
     this.hadoopJobFlowId = jobEntry.getHadoopJobFlowId();
 
     setStepsFromCluster();
@@ -123,7 +128,8 @@ public class EmrClientImpl implements EmrClient {
   /**
    * Determine if the step flow is in a running state.
    *
-   * @return true if it is not in COMPLETED or CANCELLED or FAILED or INTERRUPTED, and false otherwise.
+   * @return true if it is not in COMPLETED or CANCELLED or FAILED or
+   * INTERRUPTED, and false otherwise.
    */
   @Override
   public boolean isClusterRunning() {
@@ -163,7 +169,12 @@ public class EmrClientImpl implements EmrClient {
     boolean isClusterRunning = isClusterRunning();
     boolean isStepRunning = isStepRunning();
 
-    if ( !isAlive() && !requestClusterShutdown && ClusterState.WAITING.name().equalsIgnoreCase( currentClusterState ) ) {
+    // Terminate cluster if:
+    // 1. We created it (runOnNewCluster) and it's not set to stay alive, OR
+    // 2. It's an existing cluster (runOnNewCluster=false) and user enabled shutdownCluster
+    boolean shouldTerminate = (runOnNewCluster && !isAlive()) || (!runOnNewCluster && shutdownCluster);
+    
+    if ( shouldTerminate && !requestClusterShutdown && ClusterState.WAITING.name().equalsIgnoreCase( currentClusterState ) ) {
       if ( !isStepRunning ) {
         terminateJobFlows();
         return isClusterRunning();
@@ -215,7 +226,7 @@ public class EmrClientImpl implements EmrClient {
     instances.setMasterInstanceType( masterInstanceType );
     instances.setSlaveInstanceType( slaveInstanceType );
     instances.setKeepJobFlowAliveWhenNoSteps( isAlive() );
-    
+
     // Set EC2 subnet if provided (required for VPC-only instance types like c5.*)
     if ( ec2SubnetId != null && !ec2SubnetId.trim().isEmpty() ) {
       instances.setEc2SubnetId( ec2SubnetId.trim() );
@@ -237,9 +248,9 @@ public class EmrClientImpl implements EmrClient {
     runJobFlowRequest.setReleaseLabel( jobEntry.getEmrRelease() );
     runJobFlowRequest.setLogUri( stagingS3BucketUrl );
 
-    JobFlowInstancesConfig instances =
-      initEC2Instance( Integer.parseInt( jobEntry.getNumInstances() ), jobEntry.getMasterInstanceType(),
-        jobEntry.getSlaveInstanceType(), jobEntry.getEc2SubnetId() );
+    JobFlowInstancesConfig instances
+      = initEC2Instance( Integer.parseInt( jobEntry.getNumInstances() ), jobEntry.getMasterInstanceType(),
+      jobEntry.getSlaveInstanceType(), jobEntry.getEc2SubnetId() );
     runJobFlowRequest.setInstances( instances );
 
     List<StepConfig> steps = initSteps( stagingS3FileUrl, stepType, mainClass, jobEntry );
@@ -282,16 +293,16 @@ public class EmrClientImpl implements EmrClient {
 
     String[] cmdLineArgsArr;
     if ( cmdLineArgs == null ) {
-      cmdLineArgsArr = new String[] { "" };
+      cmdLineArgsArr = new String[] {""};
     } else {
       List<String> cmdArgs = Arrays.asList( cmdLineArgs.split( "\\s+" ) );
       List<String> updatedCmdArgs = cmdArgs.stream().map( e -> replaceDoubleS3( e ) ).collect( Collectors.toList() );
-      cmdLineArgsArr = updatedCmdArgs.toArray( new String[ updatedCmdArgs.size() ] );
+      cmdLineArgsArr = updatedCmdArgs.toArray( new String[updatedCmdArgs.size()] );
     }
 
-    StepConfig hiveStepConfig =
-      new StepConfig( "Hive",
-        new StepFactory().newRunHiveScriptStep( stagingS3qUrl, cmdLineArgsArr ) );
+    StepConfig hiveStepConfig
+      = new StepConfig( "Hive",
+      new StepFactory().newRunHiveScriptStep( stagingS3qUrl, cmdLineArgsArr ) );
     if ( isAlive() ) {
       hiveStepConfig.withActionOnFailure( ActionOnFailure.CANCEL_AND_WAIT );
     } else {
@@ -490,7 +501,8 @@ public class EmrClientImpl implements EmrClient {
   }
 
   /**
-   * Given a unparsed arguments and a separator, print log for each argument and return a list of arguments.
+   * Given a unparsed arguments and a separator, print log for each argument
+   * and return a list of arguments.
    *
    * @param args      - unparsed arguments
    * @param separator - separates one argument from another.
@@ -595,8 +607,14 @@ public class EmrClientImpl implements EmrClient {
     if ( isAlive() ) {
       cancelStepExecution();
       return true;
-    } else {
+    } else if ( runOnNewCluster || shutdownCluster ) {
+      // Terminate cluster if:
+      // 1. We created it (runOnNewCluster), OR
+      // 2. It's an existing cluster and user enabled shutdownCluster
       terminateJobFlows();
+    } else {
+      // For existing clusters without shutdownCluster flag, just cancel the step execution
+      cancelStepExecution();
     }
     return false;
   }

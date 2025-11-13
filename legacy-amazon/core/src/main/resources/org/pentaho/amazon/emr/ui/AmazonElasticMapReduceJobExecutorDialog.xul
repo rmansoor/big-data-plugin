@@ -229,6 +229,11 @@
                                 <label value="${AmazonElasticMapReduceJobExecutor.JobFlowId.Label}"/>
                                 <textbox pen:customclass="variabletextbox" id="jobentry-hadoopjob-flow-id"
                                          multiline="false" width="263"/>
+                                <hbox padding="0" height="5"></hbox>
+                                <hbox padding="0">
+                                  <checkbox id="shutdown-cluster" flex="1" command="jobEntryController.toggleShutdownCluster()"/>
+                                  <label value="${AmazonElasticMapReduceJobExecutor.ShutdownCluster.Label}"/>
+                                </hbox>
                               </vbox>
                             </hbox>
                           </row>

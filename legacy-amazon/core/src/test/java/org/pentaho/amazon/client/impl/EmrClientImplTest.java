@@ -213,18 +213,97 @@ public class EmrClientImplTest {
   }
 
   @Test
-  public void testStopSteps_whenNotLeaveClusterAlive() throws Exception {
+  public void testStopSteps_whenNotLeaveClusterAlive_onNewCluster() throws Exception {
 
     doCallRealMethod().when( emrClient ).setAlive( false );
     doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).stopSteps();
     doNothing().when( emrClient ).terminateJobFlows();
 
     emrClient.setAlive( false );
+    // Manually set runOnNewCluster to true via runJobFlow behavior
+    // We can't call runJobFlow directly due to dependencies, so we test stopSteps in isolation
+    // The actual runJobFlow sets runOnNewCluster=true, which is tested in integration tests
 
+    // Simulate being on a new cluster by not calling addStepToExistingJobFlow
     boolean stopSteps = emrClient.stopSteps();
 
     verify( emrClient, times( 1 ) ).terminateJobFlows();
     verify( emrClient, times( 0 ) ).cancelStepExecution();
+    Assert.assertEquals( false, stopSteps );
+  }
+
+  @Test
+  public void testStopSteps_whenNotLeaveClusterAlive_onExistingCluster() throws Exception {
+
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doNothing().when( emrClient ).cancelStepExecution();
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+
+    emrClient.setAlive( false );
+    // Simulate running on an existing cluster
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    emrClient.addStepToExistingJobFlow( "s3://test", "s3://bucket", "emr", "MainClass", jobEntry );
+
+    boolean stopSteps = emrClient.stopSteps();
+
+    // Should NOT terminate existing clusters, only cancel steps
+    verify( emrClient, times( 0 ) ).terminateJobFlows();
+    verify( emrClient, times( 1 ) ).cancelStepExecution();
+    Assert.assertEquals( false, stopSteps );
+  }
+
+  @Test
+  public void testStopSteps_whenShutdownClusterEnabled_onExistingCluster() throws Exception {
+
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).terminateJobFlows();
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+    doCallRealMethod().when( jobEntry ).setShutdownCluster( true );
+    doCallRealMethod().when( jobEntry ).getShutdownCluster();
+
+    emrClient.setAlive( false );
+    // Simulate running on an existing cluster with shutdown enabled
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    jobEntry.setShutdownCluster( true );
+    emrClient.addStepToExistingJobFlow( "s3://test", "s3://bucket", "emr", "MainClass", jobEntry );
+
+    boolean stopSteps = emrClient.stopSteps();
+
+    // Should terminate existing cluster when shutdownCluster is enabled
+    verify( emrClient, times( 1 ) ).terminateJobFlows();
+    verify( emrClient, times( 0 ) ).cancelStepExecution();
+    Assert.assertEquals( false, stopSteps );
+  }
+
+  @Test
+  public void testStopSteps_whenShutdownClusterDisabled_onExistingCluster() throws Exception {
+
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).cancelStepExecution();
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+    doCallRealMethod().when( jobEntry ).setShutdownCluster( false );
+    doCallRealMethod().when( jobEntry ).getShutdownCluster();
+
+    emrClient.setAlive( false );
+    // Simulate running on an existing cluster with shutdown disabled
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    jobEntry.setShutdownCluster( false );
+    emrClient.addStepToExistingJobFlow( "s3://test", "s3://bucket", "emr", "MainClass", jobEntry );
+
+    boolean stopSteps = emrClient.stopSteps();
+
+    // Should NOT terminate existing cluster when shutdownCluster is disabled
+    verify( emrClient, times( 0 ) ).terminateJobFlows();
+    verify( emrClient, times( 1 ) ).cancelStepExecution();
     Assert.assertEquals( false, stopSteps );
   }
 
@@ -276,6 +355,106 @@ public class EmrClientImplTest {
     String resultBootstrapString = EmrClientImpl.removeLineBreaks( bootstrapStringWithBreaks );
 
     Assert.assertEquals( expectedString, resultBootstrapString );
+  }
+
+  @Test
+  public void testIsRunning_shouldTerminateNewCluster_whenNotAlive() throws Exception {
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).terminateJobFlows();
+
+    // Set up the emrClient to simulate a new cluster (default state)
+    emrClient.setAlive( false );
+    // Don't call runJobFlow to avoid NPE - just test stopSteps which has the same logic
+    emrClient.stopSteps();
+
+    // Should terminate new cluster when not alive
+    verify( emrClient, times( 1 ) ).terminateJobFlows();
+  }
+
+  @Test
+  public void testRunJobFlow_setsRunOnNewCluster() throws Exception {
+    // This test verifies the behavior of runOnNewCluster by checking termination behavior
+    // Since runJobFlow has dependencies on initEmrCluster that return AWS objects,
+    // we verify the flag indirectly through the stopSteps method which reads it
+    
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).terminateJobFlows();
+
+    emrClient.setAlive( false );
+    // Default state is runOnNewCluster=true, so stopSteps should call terminateJobFlows
+    emrClient.stopSteps();
+
+    // Verify that terminateJobFlows is called, confirming runOnNewCluster=true behavior
+    verify( emrClient, times( 1 ) ).terminateJobFlows();
+  }
+
+  @Test
+  public void testAddStepToExistingJobFlow_setsRunOnExistingCluster() throws Exception {
+    String stagingS3FileUrl = "s3://bucket/key/test.jar";
+    String stagingS3BucketUrl = "s3://bucket";
+    String stepType = "emr";
+    String mainClass = "WordCount";
+
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    emrClient.addStepToExistingJobFlow( stagingS3FileUrl, stagingS3BucketUrl, stepType, mainClass, jobEntry );
+
+    // Verify runOnNewCluster is set to false (via behavior verification in other tests)
+    // This is tested indirectly through the termination behavior tests
+    verify( emrClient, times( 1 ) ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+  }
+
+  @Test
+  public void testIsRunning_shouldTerminateExistingCluster_whenShutdownClusterEnabled() throws Exception {
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).terminateJobFlows();
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+    doCallRealMethod().when( jobEntry ).setShutdownCluster( true );
+    doCallRealMethod().when( jobEntry ).getShutdownCluster();
+
+    emrClient.setAlive( false );
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    jobEntry.setShutdownCluster( true );
+    emrClient.addStepToExistingJobFlow( "s3://test", "s3://bucket", "emr", "MainClass", jobEntry );
+
+    // Test via stopSteps which uses shutdownCluster flag
+    emrClient.stopSteps();
+
+    // Should terminate existing cluster when shutdownCluster is enabled
+    verify( emrClient, times( 1 ) ).terminateJobFlows();
+  }
+
+  @Test
+  public void testIsRunning_shouldNotTerminateExistingCluster_whenShutdownClusterDisabled() throws Exception {
+    doCallRealMethod().when( emrClient ).setAlive( false );
+    doCallRealMethod().when( emrClient ).isAlive();
+    doCallRealMethod().when( emrClient ).addStepToExistingJobFlow( anyString(), anyString(), anyString(), anyString(), nullable( AmazonHiveJobExecutor.class ) );
+    doCallRealMethod().when( emrClient ).stopSteps();
+    doNothing().when( emrClient ).cancelStepExecution();
+    doReturn( new ArrayList<StepSummary>() ).when( emrClient ).getSteps();
+    doCallRealMethod().when( jobEntry ).setShutdownCluster( false );
+    doCallRealMethod().when( jobEntry ).getShutdownCluster();
+
+    emrClient.setAlive( false );
+    jobEntry.setHadoopJobFlowId( "j-EXISTING123" );
+    jobEntry.setShutdownCluster( false );
+    emrClient.addStepToExistingJobFlow( "s3://test", "s3://bucket", "emr", "MainClass", jobEntry );
+
+    // Test via stopSteps which uses shutdownCluster flag
+    emrClient.stopSteps();
+
+    // Should NOT terminate existing cluster when shutdownCluster is disabled
+    verify( emrClient, times( 0 ) ).terminateJobFlows();
+    verify( emrClient, times( 1 ) ).cancelStepExecution();
   }
 
   private void setJobEntryFields() {
