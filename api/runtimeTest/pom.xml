@@ -59,6 +59,10 @@
       <artifactId>shim-api-core</artifactId>
       <version>${pdi.version}</version>
     </dependency>
+      <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-1.2-api</artifactId>
+      </dependency>
   </dependencies>
   <build>
     <plugins>

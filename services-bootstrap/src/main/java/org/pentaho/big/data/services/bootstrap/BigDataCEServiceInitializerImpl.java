@@ -19,6 +19,7 @@ import com.pentaho.big.data.bundles.impl.shim.hive.ImpalaDriver;
 import com.pentaho.big.data.bundles.impl.shim.hive.ImpalaSimbaDriver;
 import com.pentaho.big.data.bundles.impl.shim.hive.SparkSimbaDriver;
 import org.apache.commons.vfs2.FileSystemException;
+import org.apache.logging.log4j.Logger;
 import org.pentaho.authentication.mapper.api.AuthenticationMappingManager;
 import org.pentaho.big.data.api.cluster.service.locator.impl.NamedClusterServiceLocatorImpl;
 import org.pentaho.big.data.api.jdbc.impl.ClusterInitializingDriver;
@@ -60,9 +61,7 @@ import org.pentaho.runtime.test.RuntimeTester;
 import org.pentaho.runtime.test.i18n.impl.BaseMessagesMessageGetterFactoryImpl;
 import org.pentaho.runtime.test.impl.RuntimeTesterImpl;
 import org.pentaho.runtime.test.network.impl.ConnectivityTestFactoryImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.logging.log4j.LogManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -71,11 +70,12 @@ import java.util.concurrent.Executors;
 
 @ServiceProvider(id = "BigDataCEServiceInitializer", description = "", provides = BigDataServicesInitializer.class)
 public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializer, ServiceProviderInterface<BigDataServicesInitializer> {
-  protected static final Logger logger = LoggerFactory.getLogger( BigDataServicesInitializer.class );
+  protected static final Logger logger = LogManager.getLogger("com.pentaho.big.data");
 
 
   @Override
   public void doInitialize() {
+    logger.
     logger.debug( "Starting Pentaho Big Data Plugin bootstrap process." );
     try {
       HadoopShim hadoopShim = initializeCommonServices();
@@ -157,8 +157,8 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
    */
   protected AuthenticationMappingManager initializeAuthenticationManager( HadoopShim hadoopShim,
                                                                           List<String> shimAvailableServices ) {
-    logger.debug( "Bootstrapping the authentication manager service." );
-    logger.debug( "No authentication manager service available in CE - continuing without authentication" );
+    logger.error( "Bootstrapping the authentication manager service." );
+    logger.error( "No authentication manager service available in CE - continuing without authentication" );
     return null;
   }
 
