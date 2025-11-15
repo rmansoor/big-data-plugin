@@ -80,7 +80,7 @@ public class NamedClusterImpl implements NamedCluster, NamedClusterOsgi {
   public static final String UPPER_STRING = "String";
 
 
-  private static final Logger LOGGER = LogManager.getRootLogger();
+  private static final Logger LOGGER = LogManager.getLogger( NamedClusterImpl.class );
 
   private VariableSpace variables = new Variables();
 

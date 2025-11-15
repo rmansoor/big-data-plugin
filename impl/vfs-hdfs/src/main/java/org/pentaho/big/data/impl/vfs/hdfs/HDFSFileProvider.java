@@ -43,7 +43,7 @@ import java.util.Collections;
 
 public class HDFSFileProvider extends AbstractOriginatingFileProvider {
 
-  protected static Logger logger = LogManager.getRootLogger();
+  protected static Logger logger = LogManager.getLogger( HDFSFileProvider.class );
   private MetastoreLocator metaStoreService;
   /**
    * The scheme this provider was designed to support

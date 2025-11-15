@@ -36,7 +36,7 @@ import java.lang.reflect.Method;
  * User: RFellows Date: 6/8/12
  */
 public class VfsFileChooserHelper {
-  private static final Logger logger = LogManager.getRootLogger();
+  private static final Logger logger = LogManager.getLogger( VfsFileChooserHelper.class );
   private VfsFileChooserDialog fileChooserDialog = null;
   private Shell shell = null;
   private VariableSpace variableSpace = null;

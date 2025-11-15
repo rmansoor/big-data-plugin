@@ -35,7 +35,7 @@ import java.util.Collections;
 public class ThinHadoopClusterEditExtension implements ExtensionPointInterface {
 
   HadoopClusterDelegate hadoopClusterDelegate;
-  private static final Logger logChannel = LogManager.getRootLogger();
+  private static final Logger logChannel = LogManager.getLogger( ThinHadoopClusterEditExtension.class );
 
   public ThinHadoopClusterEditExtension() {
     this.hadoopClusterDelegate = new HadoopClusterDelegate( BigDataServicesHelper.getNamedClusterService(), RuntimeTesterImpl.getInstance() );

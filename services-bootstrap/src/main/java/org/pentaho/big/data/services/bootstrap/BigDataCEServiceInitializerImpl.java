@@ -75,11 +75,10 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
 
   @Override
   public void doInitialize() {
-    // Initialize Big Data logging configuration programmatically
+    // Initialize Big Data logging configuration
     BigDataLogConfig.initializeBigDataLogging();
     
     logger.info("Starting Pentaho Big Data Plugin bootstrap process.");
-    logger.debug( "Starting Pentaho Big Data Plugin bootstrap process." );
     try {
       HadoopShim hadoopShim = initializeCommonServices();
       if ( hadoopShim == null ) {
@@ -112,7 +111,7 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
         e );
     }
 
-    logger.debug( "Finished Pentaho Big Data Plugin bootstrap process." );
+    logger.info( "Finished Pentaho Big Data Plugin bootstrap process." );
 
   }
 

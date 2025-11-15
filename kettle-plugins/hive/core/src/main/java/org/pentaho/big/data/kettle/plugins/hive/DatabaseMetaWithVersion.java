@@ -32,7 +32,7 @@ import java.sql.SQLException;
  * Created by bryan on 4/14/16.
  */
 public abstract class DatabaseMetaWithVersion extends BaseDatabaseMeta {
-  private static final Logger logger = LogManager.getRootLogger();
+  private static final Logger logger = LogManager.getLogger( DatabaseMetaWithVersion.class );
   private final DriverLocator driverLocator;
 
   protected DatabaseMetaWithVersion( DriverLocator driverLocator ) {

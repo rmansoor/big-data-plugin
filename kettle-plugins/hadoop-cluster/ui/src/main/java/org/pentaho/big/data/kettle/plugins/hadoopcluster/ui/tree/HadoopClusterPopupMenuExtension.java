@@ -67,7 +67,7 @@ public class HadoopClusterPopupMenuExtension implements ExtensionPointInterface 
   private NamedClusterService namedClusterService;
   private String internalShim;
 
-  private static final Logger logChannel = LogManager.getRootLogger();
+  private static final Logger logChannel = LogManager.getLogger( HadoopClusterPopupMenuExtension.class );
   private NamedCluster lastNamedCluster;
   private RuntimeTester runtimeTester = RuntimeTesterImpl.getInstance();
   private HadoopClusterManager hadoopClusterManager;

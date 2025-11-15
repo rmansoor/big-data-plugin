@@ -37,7 +37,7 @@ public class JobEntrySparkSubmitAnalyzer extends JobEntryAnalyzer<JobEntrySparkS
   private static final String DRIVER_MEMORY = "driverMemory";
   private static final String MASTER_URL = "masterUrl";
 
-  private Logger log = LogManager.getRootLogger();
+  private Logger log = LogManager.getLogger( JobEntrySparkSubmitAnalyzer.class );
 
   @Override
   public Set<Class<? extends JobEntryInterface>> getSupportedEntries() {

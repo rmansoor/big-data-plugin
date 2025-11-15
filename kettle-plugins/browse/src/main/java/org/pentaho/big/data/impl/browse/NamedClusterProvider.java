@@ -56,7 +56,7 @@ public class NamedClusterProvider extends BaseFileProvider<NamedClusterFile> {
 
   private NamedClusterService namedClusterManager;
   private MetastoreLocator metastoreLocator;
-  private Logger logger = LogManager.getRootLogger();
+  private Logger logger = LogManager.getLogger( NamedClusterProvider.class );
   private boolean initialized = false;
 
   public NamedClusterProvider() {

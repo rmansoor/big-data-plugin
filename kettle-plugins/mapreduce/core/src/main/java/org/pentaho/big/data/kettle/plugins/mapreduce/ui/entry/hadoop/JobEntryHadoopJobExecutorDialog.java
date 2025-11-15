@@ -54,7 +54,7 @@ import java.util.ResourceBundle;
   documentationUrl = "https://pentaho-community.atlassian.net/wiki/display/EAI/Hadoop+Job+Executor" )
 public class JobEntryHadoopJobExecutorDialog extends JobEntryDialog implements JobEntryDialogInterface {
   private static final Class<?> CLZ = JobEntryHadoopJobExecutor.class;
-  private static final Logger logger = LogManager.getRootLogger();
+  private static final Logger logger = LogManager.getLogger( JobEntryHadoopJobExecutorDialog.class );
   private final NamedClusterService namedClusterService;
   private final JobEntryHadoopJobExecutorController controller;
   private JobEntryHadoopJobExecutor jobEntry;

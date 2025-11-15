@@ -38,7 +38,7 @@ public class LoggingRuntimeTestActionHandlerImpl implements RuntimeTestActionHan
   }
 
   public LoggingRuntimeTestActionHandlerImpl( MessageGetterFactory messageGetterFactory ) {
-    this( messageGetterFactory, LogManager.getRootLogger() );
+    this( messageGetterFactory, LogManager.getLogger( LoggingRuntimeTestActionHandlerImpl.class ) );
   }
 
   public LoggingRuntimeTestActionHandlerImpl( MessageGetterFactory messageGetterFactory, Logger logger ) {

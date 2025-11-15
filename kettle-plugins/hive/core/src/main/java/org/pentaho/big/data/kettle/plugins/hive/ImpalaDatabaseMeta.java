@@ -39,7 +39,7 @@ public class ImpalaDatabaseMeta extends Hive2DatabaseMeta implements DatabaseInt
   protected static final String DRIVER_CLASS_NAME = "org.apache.hive.jdbc.HiveDriver";
   protected static final int DEFAULT_PORT = 21050;
 
-  private static final Logger logChannel = LogManager.getRootLogger();
+  private static final Logger logChannel = LogManager.getLogger( ImpalaDatabaseMeta.class );
 
   @VisibleForTesting
   ImpalaDatabaseMeta( DriverLocator driverLocator, NamedClusterService namedClusterService,
