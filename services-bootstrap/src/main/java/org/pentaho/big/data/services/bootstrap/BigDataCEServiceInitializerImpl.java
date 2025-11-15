@@ -70,7 +70,7 @@ import java.util.concurrent.Executors;
 
 @ServiceProvider(id = "BigDataCEServiceInitializer", description = "", provides = BigDataServicesInitializer.class)
 public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializer, ServiceProviderInterface<BigDataServicesInitializer> {
-  protected static final Logger logger = BigDataLogConfig.getBigDataLogger("com.pentaho.big.data");
+  protected static final Logger logger = LogManager.getLogger(BigDataCEServiceInitializerImpl.class );
 
 
   @Override
