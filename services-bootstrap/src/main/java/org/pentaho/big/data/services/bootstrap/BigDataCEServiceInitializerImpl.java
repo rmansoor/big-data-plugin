@@ -62,19 +62,28 @@ import org.pentaho.runtime.test.i18n.impl.BaseMessagesMessageGetterFactoryImpl;
 import org.pentaho.runtime.test.impl.RuntimeTesterImpl;
 import org.pentaho.runtime.test.network.impl.ConnectivityTestFactoryImpl;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Level;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Executors;
 
 @ServiceProvider(id = "BigDataCEServiceInitializer", description = "", provides = BigDataServicesInitializer.class)
 public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializer, ServiceProviderInterface<BigDataServicesInitializer> {
   protected static final Logger logger = LogManager.getLogger(BigDataCEServiceInitializerImpl.class );
+  private static final String LOGGING_PROPERTIES_FILE = "bigdata-logging.properties";
+  private static final String LOGGER_PREFIX = "logger.";
 
 
   @Override
   public void doInitialize() {
+    // Register loggers from properties file first
+    registerLoggers();
+    
     // Initialize Big Data logging configuration
     BigDataLogConfig.initializeBigDataLogging();
     
@@ -113,6 +122,46 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
 
     logger.info( "Finished Pentaho Big Data Plugin bootstrap process." );
 
+  }
+
+  /**
+   * Register all loggers from the bigdata-logging.properties file.
+   * Loggers are registered dynamically based on the file contents.
+   */
+  protected void registerLoggers() {
+    logger.info("Registering Big Data loggers from {}", LOGGING_PROPERTIES_FILE);
+    
+    Properties props = new Properties();
+    try (InputStream is = getClass().getClassLoader().getResourceAsStream(LOGGING_PROPERTIES_FILE)) {
+      if (is != null) {
+        props.load(is);
+        logger.debug("Loaded logging configuration from {}", LOGGING_PROPERTIES_FILE);
+        
+        int registeredCount = 0;
+        for (String propName : props.stringPropertyNames()) {
+          if (propName.startsWith(LOGGER_PREFIX)) {
+            String loggerName = propName.substring(LOGGER_PREFIX.length());
+            String levelStr = props.getProperty(propName);
+            
+            try {
+              Level level = Level.toLevel(levelStr, Level.INFO);
+              BigDataLogConfig.registerLogger(loggerName, level);
+              logger.debug("Registered logger: {} = {}", loggerName, level);
+              registeredCount++;
+            } catch (Exception e) {
+              logger.warn("Invalid log level '{}' for logger '{}', defaulting to INFO", levelStr, loggerName);
+              BigDataLogConfig.registerLogger(loggerName, Level.INFO);
+              registeredCount++;
+            }
+          }
+        }
+        logger.info("Registered {} Big Data loggers", registeredCount);
+      } else {
+        logger.warn("Could not find {} - no loggers will be registered", LOGGING_PROPERTIES_FILE);
+      }
+    } catch (IOException e) {
+      logger.error("Error loading {} - no loggers will be registered", LOGGING_PROPERTIES_FILE, e);
+    }
   }
 
   @Override

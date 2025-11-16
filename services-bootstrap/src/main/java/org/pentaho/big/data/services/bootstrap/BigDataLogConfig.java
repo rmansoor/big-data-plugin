@@ -98,6 +98,38 @@ public class BigDataLogConfig {
   protected static void resetInitialization() {
     initialized = false;
   }
+
+  /**
+   * Registers a logger with a specific log level.
+   * This method dynamically configures a logger at runtime.
+   *
+   * @param loggerName the name of the logger to register
+   * @param level the Log4j2 Level to set for this logger
+   * @return true if the logger was successfully registered, false otherwise
+   */
+  public static boolean registerLogger(String loggerName, org.apache.logging.log4j.Level level) {
+    try {
+      LoggerContext context = (LoggerContext) LogManager.getContext(false);
+      org.apache.logging.log4j.core.config.Configuration config = context.getConfiguration();
+      org.apache.logging.log4j.core.config.LoggerConfig loggerConfig = config.getLoggerConfig(loggerName);
+      
+      // Create a new logger config if it doesn't exist or if it's the root logger
+      if (loggerConfig.getName().equals(loggerName)) {
+        // Logger exists, update its level
+        loggerConfig.setLevel(level);
+      } else {
+        // Create a new logger config
+        loggerConfig = new org.apache.logging.log4j.core.config.LoggerConfig(loggerName, level, true);
+        config.addLogger(loggerName, loggerConfig);
+      }
+      
+      context.updateLoggers();
+      return true;
+    } catch (Exception e) {
+      logger.error("Failed to register logger: " + loggerName, e);
+      return false;
+    }
+  }
 }
 
 
