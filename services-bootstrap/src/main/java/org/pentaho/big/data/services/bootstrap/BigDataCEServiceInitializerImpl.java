@@ -16,6 +16,7 @@ import org.pentaho.di.core.database.DatabaseInterface;
 import org.pentaho.database.IDatabaseDialect;
 import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.plugins.DatabasePluginType;
+import org.pentaho.hadoop.shim.common.fs.FileSystemRegistry;
 import org.pentaho.platform.engine.core.system.PentahoSystem;
 import com.pentaho.big.data.bundles.impl.shim.hbase.HBaseServiceFactory;
 import com.pentaho.big.data.bundles.impl.shim.hdfs.HadoopFileSystemFactoryImpl;
@@ -112,6 +113,7 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
       List<String> shimAvailableServices = hadoopShim.getAvailableServices();
       AuthenticationMappingManager authenticationMappingManager =
         initializeAuthenticationManager( hadoopShim, shimAvailableServices );
+      initalizeCustomAndCloudSchemas();
       HadoopFileSystemLocatorImpl hadoopFileSystemLocator =
         initializeHdfsServices( hadoopShim, shimAvailableServices, authenticationMappingManager );
       NamedClusterServiceLocatorImpl namedClusterServiceLocator = NamedClusterServiceLocatorImpl
@@ -370,6 +372,10 @@ public class BigDataCEServiceInitializerImpl implements BigDataServicesInitializ
     }
   }
 
+  protected void initalizeCustomAndCloudSchemas() {
+    
+    FileSystemRegistry.registerDefaults();
+  }
   /**
    * Initialize format service factories (Parquet, ORC, Avro, etc.)
    *
