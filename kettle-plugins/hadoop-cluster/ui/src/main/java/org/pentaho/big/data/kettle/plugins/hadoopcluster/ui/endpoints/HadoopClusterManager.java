@@ -9,8 +9,6 @@
  *
  * Change Date: 2029-07-20
  ******************************************************************************/
-
-
 package org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.endpoints;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,13 +26,18 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.BasicAuthCache;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContexts;
 import org.apache.http.util.EntityUtils;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -72,6 +75,8 @@ import org.pentaho.runtime.test.result.RuntimeTestResultEntry;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
+import javax.net.ssl.KeyStore;
+import javax.net.ssl.SSLContext;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -115,364 +120,363 @@ import static org.pentaho.big.data.kettle.plugins.hadoopcluster.ui.dialog.wizard
 
 public class HadoopClusterManager implements RuntimeTestProgressCallback {
 
-  private static final Class<?> PKG = HadoopClusterDialog.class;
-  public static final String STRING_NAMED_CLUSTERS = BaseMessages.getString( PKG, "HadoopClusterTree.Title" );
-  public static final String PLACEHOLDER_VALUE = "[object Object]";
-  private final String fileSeparator = System.getProperty( "file.separator" );
-  private static final String PASS = "Pass";
-  private static final String WARNING = "Warning";
-  private static final String FAIL = "Fail";
-  private static final String NAMED_CLUSTER = "namedCluster";
-  private static final String INSTALLED = "installed";
-  private static final String CONFIG_PROPERTIES = "config.properties";
-  private static final String KEYTAB_AUTH_FILE = "keytabAuthFile";
-  private static final String KEYTAB_IMPL_FILE = "keytabImpFile";
-  public static final String MAPR_SHIM = "Map-R";
-  public static final String MAPRFS_SCHEME = "maprfs";
+    private static final Class<?> PKG = HadoopClusterDialog.class;
+    public static final String STRING_NAMED_CLUSTERS = BaseMessages.getString(PKG, "HadoopClusterTree.Title");
+    public static final String PLACEHOLDER_VALUE = "[object Object]";
+    private final String fileSeparator = System.getProperty("file.separator");
+    private static final String PASS = "Pass";
+    private static final String WARNING = "Warning";
+    private static final String FAIL = "Fail";
+    private static final String NAMED_CLUSTER = "namedCluster";
+    private static final String INSTALLED = "installed";
+    private static final String CONFIG_PROPERTIES = "config.properties";
+    private static final String KEYTAB_AUTH_FILE = "keytabAuthFile";
+    private static final String KEYTAB_IMPL_FILE = "keytabImpFile";
+    public static final String MAPR_SHIM = "Map-R";
+    public static final String MAPRFS_SCHEME = "maprfs";
 
-  private static final LogChannelInterface log =
-    KettleLogStore.getLogChannelInterfaceFactory().create( "HadoopClusterManager" );
+    private static final LogChannelInterface log
+            = KettleLogStore.getLogChannelInterfaceFactory().create("HadoopClusterManager");
 
-  private final String internalShim;
+    private final String internalShim;
 
-  private enum KERBEROS_SUBTYPE {
-    PASSWORD( "Password" ),
-    KEYTAB( "Keytab" );
+    private enum KERBEROS_SUBTYPE {
+        PASSWORD("Password"),
+        KEYTAB("Keytab");
 
-    private String val;
+        private String val;
 
-    KERBEROS_SUBTYPE( String val ) {
-      this.val = val;
-    }
-
-    public String getValue() {
-      return this.val;
-    }
-  }
-
-  private enum SECURITY_TYPE {
-    NONE( "None" ),
-    KERBEROS( "Kerberos" ),
-    KNOX( "Knox" );
-
-    private String val;
-
-    SECURITY_TYPE( String val ) {
-      this.val = val;
-    }
-
-    public String getValue() {
-      return this.val;
-    }
-  }
-
-  private enum IMPERSONATION_TYPE {
-    SIMPLE( "simple" ),
-    DISABLED( "disabled" );
-
-    private String val;
-
-    IMPERSONATION_TYPE( String val ) {
-      this.val = val;
-    }
-
-    public String getValue() {
-      return this.val;
-    }
-  }
-
-  private static final String KERBEROS_AUTHENTICATION_USERNAME = "pentaho.authentication.default.kerberos.principal";
-  private static final String KERBEROS_AUTHENTICATION_PASS = "pentaho.authentication.default.kerberos.password";
-  private static final String KERBEROS_IMPERSONATION_USERNAME =
-    "pentaho.authentication.default.mapping.server.credentials.kerberos.principal";
-  private static final String KERBEROS_IMPERSONATION_PASS =
-    "pentaho.authentication.default.mapping.server.credentials.kerberos.password";
-  private static final String IMPERSONATION = "pentaho.authentication.default.mapping.impersonation.type";
-  private static final String KEYTAB_AUTHENTICATION_LOCATION = "pentaho.authentication.default.kerberos.keytabLocation";
-  private static final String KEYTAB_IMPERSONATION_LOCATION =
-    "pentaho.authentication.default.mapping.server.credentials.kerberos.keytabLocation";
-
-  private final Spoon spoon;
-  private final NamedClusterService namedClusterService;
-  private final IMetaStore metaStore;
-  private final VariableSpace variableSpace;
-  private RuntimeTestStatus runtimeTestStatus = null;
-
-  public HadoopClusterManager( Spoon spoon, NamedClusterService namedClusterService, IMetaStore metaStore,
-                               String internalShim ) {
-    this.spoon = spoon;
-    this.namedClusterService = namedClusterService;
-    this.metaStore = metaStore != null ? metaStore : spoon.getMetaStore();
-    this.variableSpace = spoon == null ? new Variables() : (AbstractMeta) spoon.getActiveMeta();
-    this.internalShim = internalShim;
-  }
-
-  public HadoopClusterManager( NamedClusterService namedClusterService, IMetaStore metaStore,
-                               String internalShim ) {
-    this( null, namedClusterService, metaStore, internalShim);
-  }
-
-  public JSONObject importNamedCluster( ThinNameClusterModel model,
-                                        Map<String, CachedFileItemStream> siteFilesSource ) {
-    JSONObject response = new JSONObject();
-    response.put( NAMED_CLUSTER, "" );
-    try {
-      // Create and initialize template.
-      NamedCluster nc = namedClusterService.getClusterTemplate();
-      nc.setHdfsHost( "" );
-      nc.setHdfsPort( "" );
-      nc.setJobTrackerHost( "" );
-      nc.setJobTrackerPort( "" );
-      nc.setZooKeeperHost( "" );
-      nc.setZooKeeperPort( "" );
-      nc.setOozieUrl( "" );
-      nc.setName( model.getName() );
-      nc.setHdfsUsername( model.getHdfsUsername() );
-      nc.setHdfsPassword( encodePassword( model.getHdfsPassword() ) );
-      if ( variableSpace != null ) {
-        nc.shareVariablesWith( variableSpace );
-      } else {
-        nc.initializeVariablesFrom( null );
-      }
-
-      boolean isConfigurationSet =
-        configureNamedCluster( siteFilesSource, nc);
-      if ( isConfigurationSet ) {
-        deleteNamedClusterSchemaOnly( model );
-        setupKnoxSecurity( nc, model );
-        deleteConfigFolder( nc.getName() );
-        installSiteFiles( siteFilesSource, nc );
-        namedClusterService.create( nc, metaStore );
-        createConfigProperties( nc );
-        setupKerberosSecurity( model, siteFilesSource, "", "" );
-        response.put( NAMED_CLUSTER, nc.getName() );
-      }
-    } catch ( Exception e ) {
-      log.logError( e.getMessage() );
-    }
-    return response;
-  }
-
-  private void deleteNamedClusterSchemaOnly( ThinNameClusterModel model ) throws MetaStoreException {
-    List<String> existingNcNames = namedClusterService.listNames( metaStore );
-    for ( String existingNcName : existingNcNames ) {
-      if ( existingNcName.equalsIgnoreCase( model.getName() ) ) {
-        namedClusterService.delete( existingNcName, metaStore );
-      }
-    }
-  }
-
-  private NamedCluster convertToNamedCluster( ThinNameClusterModel model ) {
-
-    NamedCluster nc = namedClusterService.getClusterTemplate();
-    nc.setName( model.getName() );
-    nc.setHdfsHost( model.getHdfsHost() );
-    nc.setHdfsPort( model.getHdfsPort() );
-    nc.setHdfsUsername( model.getHdfsUsername() );
-    nc.setHdfsPassword( encodePassword( model.getHdfsPassword() ) );
-    nc.setJobTrackerHost( model.getJobTrackerHost() );
-    nc.setJobTrackerPort( model.getJobTrackerPort() );
-    nc.setZooKeeperHost( model.getZooKeeperHost() );
-    nc.setZooKeeperPort( model.getZooKeeperPort() );
-    nc.setOozieUrl( model.getOozieUrl() );
-    nc.setKafkaBootstrapServers( model.getKafkaBootstrapServers() );
-    resolveShimIdentifier( nc );
-    setupKnoxSecurity( nc, model );
-    if ( variableSpace != null ) {
-      nc.shareVariablesWith( variableSpace );
-    } else {
-      nc.initializeVariablesFrom( null );
-    }
-    return nc;
-  }
-
-  public boolean deleteConfigFolder( String configFolderName ) throws IOException {
-    File configFolder = new File( getNamedClusterConfigsRootDir() );
-    File[] files = configFolder.listFiles();
-    if ( files != null ) {
-      for ( File file : files ) {
-        if ( file.isDirectory() && file.getName().equalsIgnoreCase( configFolderName ) ) {
-          FileUtils.deleteDirectory( file );
-          break;
+        KERBEROS_SUBTYPE(String val) {
+            this.val = val;
         }
-      }
-    }
-    return true;
-  }
 
-  public JSONObject createNamedCluster( ThinNameClusterModel model,
-                                        Map<String, CachedFileItemStream> siteFilesSource ) {
-    return createNamedCluster( model, siteFilesSource, "", "" );
-  }
-
-  @VisibleForTesting
-  public JSONObject createNamedCluster( ThinNameClusterModel model,
-                                        Map<String, CachedFileItemStream> siteFilesSource,
-                                        String keytabAuthenticationLocation, String keytabImpersonationLocation ) {
-    JSONObject response = new JSONObject();
-    response.put( NAMED_CLUSTER, "" );
-    try {
-      NamedCluster nc = convertToNamedCluster( model );
-      deleteConfigFolder( nc.getName() );
-      installSiteFiles( siteFilesSource, nc );
-      namedClusterService.create( nc, metaStore );
-      createConfigProperties( nc );
-      setupKerberosSecurity( model, siteFilesSource, keytabAuthenticationLocation, keytabImpersonationLocation );
-      response.put( NAMED_CLUSTER, nc.getName() );
-    } catch ( Exception e ) {
-      log.logError( e.getMessage() );
-    }
-    return response;
-  }
-
-  public JSONObject editNamedCluster( ThinNameClusterModel model, boolean isEditMode,
-                                      Map<String, CachedFileItemStream> siteFilesSource ) {
-    JSONObject response = new JSONObject();
-    response.put( NAMED_CLUSTER, "" );
-    try {
-      final NamedCluster newNc = namedClusterService.getNamedClusterByName( model.getName(), metaStore );
-      final NamedCluster oldNc = namedClusterService.getNamedClusterByName( model.getOldName(), metaStore );
-      // Must get the current shim identifier before the creation of the Named Cluster xml schema for later comparison.
-
-      String shimId = null;
-      List<NamedClusterSiteFile> existingSiteFiles = new ArrayList<>();
-      if ( oldNc != null ) {
-        shimId = oldNc.getShimIdentifier();
-        existingSiteFiles = oldNc.getSiteFiles();
-      }
-      NamedCluster nc = convertToNamedCluster( model );
-      nc.setSiteFiles( getIntersectionSiteFiles( model, existingSiteFiles ) );
-      installSiteFiles( siteFilesSource, nc );
-      if ( newNc != null ) {
-        namedClusterService.update( nc, metaStore ); //new cluster name exists
-      } else {
-        namedClusterService.create( nc, metaStore ); //new cluster does not exist.  Use creation logic
-      }
-
-      File oldConfigFolder = new File( getNamedClusterConfigsRootDir() + fileSeparator + model.getOldName() );
-      File newConfigFolder = new File( getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() );
-
-      // Copy all files from the old config folder to the new config folder.
-      if ( !oldConfigFolder.getName().equalsIgnoreCase( newConfigFolder.getName() ) ) {
-        FileUtils.copyDirectory( oldConfigFolder, newConfigFolder );
-      } else {
-        boolean success = oldConfigFolder.renameTo( newConfigFolder );
-        if ( !success ) {
-          log.logError( "Renaming Named Cluster configuration folder failed." );
+        public String getValue() {
+            return this.val;
         }
-      }
-
-
-      // If the user changed the shim, create a new config.properties file that corresponds to that shim
-      // in the new config folder. Also save the keytab locations to set them again in the new config.properties
-      // unless the kerberos subtype is Password.
-      String keytabAuthenticationLocation = "";
-      String keytabImpersonationLocation = "";
-      String kerberosSubType = model.getKerberosSubType();
-      if ( !kerberosSubType.equals( KERBEROS_SUBTYPE.PASSWORD.getValue() ) ) {
-        String configFile =
-          getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + CONFIG_PROPERTIES;
-        PropertiesConfiguration config = new PropertiesConfiguration( new File( configFile ) );
-        keytabAuthenticationLocation = (String) config.getProperty( KEYTAB_AUTHENTICATION_LOCATION );
-        keytabImpersonationLocation = (String) config.getProperty( KEYTAB_IMPERSONATION_LOCATION );
-      }
-      if ( nc.getShimIdentifier() != null && !nc.getShimIdentifier().equals( shimId ) ) {
-        createConfigProperties( nc );
-      }
-      setupKerberosSecurity( model, siteFilesSource, keytabAuthenticationLocation, keytabImpersonationLocation );
-
-      // Delete old config folder.
-      if ( isEditMode && !oldConfigFolder.getName().equalsIgnoreCase( newConfigFolder.getName() ) ) {
-        deleteNamedCluster( metaStore, model.getOldName(), false );
-      }
-
-      response.put( NAMED_CLUSTER, nc.getName() );
-    } catch ( Exception e ) {
-      log.logError( e.getMessage() );
     }
-    return response;
-  }
 
-  public InputStream getSiteFileInputStream( String namedCluster, String siteFile ) {
-    NamedCluster nc = namedClusterService.getNamedClusterByName( namedCluster, this.metaStore );
-    return nc.getSiteFileInputStream( siteFile );
-  }
+    private enum SECURITY_TYPE {
+        NONE("None"),
+        KERBEROS("Kerberos"),
+        KNOX("Knox");
 
-  public ThinNameClusterModel getNamedCluster( String namedCluster ) {
-    ThinNameClusterModel model = null;
-    try {
-      List<NamedCluster> namedClusters = namedClusterService.list( metaStore );
-      for ( NamedCluster nc : namedClusters ) {
-        if ( nc.getName().equalsIgnoreCase( namedCluster ) ) {
-          model = new ThinNameClusterModel();
-          model.setName( nc.getName() );
-          model.setShimIdentifier( nc.getShimIdentifier());
-          model.setHdfsHost( nc.getHdfsHost() );
-          model.setHdfsUsername( nc.getHdfsUsername() );
-          model.setHdfsPassword( nc.getHdfsPassword() );
-          model.setHdfsPort( nc.getHdfsPort() );
-          model.setJobTrackerHost( nc.getJobTrackerHost() );
-          model.setJobTrackerPort( nc.getJobTrackerPort() );
-          model.setKafkaBootstrapServers( nc.getKafkaBootstrapServers() );
-          model.setOozieUrl( nc.getOozieUrl() );
-          model.setZooKeeperPort( nc.getZooKeeperPort() );
-          model.setZooKeeperHost( nc.getZooKeeperHost() );
-          model.setGatewayPassword( nc.getGatewayPassword() );
-          String gatewayURL = nc.getGatewayUrl();
-          if( gatewayURL != null && !gatewayURL.startsWith( "Encrypted" )) {
-            gatewayURL = encodePassword( gatewayURL );
-          }
-          model.setGatewayUrl( gatewayURL );
-          model.setGatewayUsername( nc.getGatewayUsername() );
-          model.setSecurityType( SECURITY_TYPE.NONE.getValue() );
-          if ( nc.isUseGateway() ) {
-            model.setSecurityType( SECURITY_TYPE.KNOX.getValue() );
-          } else {
-            resolveKerberosSecurity( model, nc );
-          }
-          model.setSiteFiles( nc.getSiteFiles().stream()
-            .map( sf -> new SimpleImmutableEntry<>( NAME_KEY, sf.getSiteFileName() ) )
-            .collect( Collectors.toList() ) );
-          break;
+        private String val;
+
+        SECURITY_TYPE(String val) {
+            this.val = val;
         }
-      }
-    } catch ( MetaStoreException e ) {
-      log.logError( e.getMessage() );
-    }
-    return model;
-  }
 
-  private boolean configureNamedCluster( Map<String, CachedFileItemStream> siteFilesSource, NamedCluster nc ) {
-    resolveShimIdentifier( nc );
-
-    String oozieBaseUrl = "oozie.base.url";
-    Map<String, String> properties = new HashMap();
-    extractProperties( siteFilesSource, "core-site.xml", properties, new String[] { "fs.defaultFS" } );
-    extractProperties( siteFilesSource, "yarn-site.xml", properties,
-            new String[] { "yarn.resourcemanager.address", "yarn.resourcemanager.hostname" } );
-    extractProperties( siteFilesSource, "hive-site.xml", properties,
-            new String[] { "hive.zookeeper.quorum", "hive.zookeeper.client.port" } );
-    extractProperties( siteFilesSource, "oozie-site.xml", properties, new String[] { oozieBaseUrl } );
-    if ( properties.get( oozieBaseUrl ) == null ) {
-      extractProperties( siteFilesSource, "oozie-default.xml", properties, new String[] { oozieBaseUrl } );
+        public String getValue() {
+            return this.val;
+        }
     }
 
-    boolean isConfigurationSet = false;
-    /*
+    private enum IMPERSONATION_TYPE {
+        SIMPLE("simple"),
+        DISABLED("disabled");
+
+        private String val;
+
+        IMPERSONATION_TYPE(String val) {
+            this.val = val;
+        }
+
+        public String getValue() {
+            return this.val;
+        }
+    }
+
+    private static final String KERBEROS_AUTHENTICATION_USERNAME = "pentaho.authentication.default.kerberos.principal";
+    private static final String KERBEROS_AUTHENTICATION_PASS = "pentaho.authentication.default.kerberos.password";
+    private static final String KERBEROS_IMPERSONATION_USERNAME
+            = "pentaho.authentication.default.mapping.server.credentials.kerberos.principal";
+    private static final String KERBEROS_IMPERSONATION_PASS
+            = "pentaho.authentication.default.mapping.server.credentials.kerberos.password";
+    private static final String IMPERSONATION = "pentaho.authentication.default.mapping.impersonation.type";
+    private static final String KEYTAB_AUTHENTICATION_LOCATION = "pentaho.authentication.default.kerberos.keytabLocation";
+    private static final String KEYTAB_IMPERSONATION_LOCATION
+            = "pentaho.authentication.default.mapping.server.credentials.kerberos.keytabLocation";
+
+    private final Spoon spoon;
+    private final NamedClusterService namedClusterService;
+    private final IMetaStore metaStore;
+    private final VariableSpace variableSpace;
+    private RuntimeTestStatus runtimeTestStatus = null;
+
+    public HadoopClusterManager(Spoon spoon, NamedClusterService namedClusterService, IMetaStore metaStore,
+            String internalShim) {
+        this.spoon = spoon;
+        this.namedClusterService = namedClusterService;
+        this.metaStore = metaStore != null ? metaStore : spoon.getMetaStore();
+        this.variableSpace = spoon == null ? new Variables() : (AbstractMeta) spoon.getActiveMeta();
+        this.internalShim = internalShim;
+    }
+
+    public HadoopClusterManager(NamedClusterService namedClusterService, IMetaStore metaStore,
+            String internalShim) {
+        this(null, namedClusterService, metaStore, internalShim);
+    }
+
+    public JSONObject importNamedCluster(ThinNameClusterModel model,
+            Map<String, CachedFileItemStream> siteFilesSource) {
+        JSONObject response = new JSONObject();
+        response.put(NAMED_CLUSTER, "");
+        try {
+            // Create and initialize template.
+            NamedCluster nc = namedClusterService.getClusterTemplate();
+            nc.setHdfsHost("");
+            nc.setHdfsPort("");
+            nc.setJobTrackerHost("");
+            nc.setJobTrackerPort("");
+            nc.setZooKeeperHost("");
+            nc.setZooKeeperPort("");
+            nc.setOozieUrl("");
+            nc.setName(model.getName());
+            nc.setHdfsUsername(model.getHdfsUsername());
+            nc.setHdfsPassword(encodePassword(model.getHdfsPassword()));
+            if (variableSpace != null) {
+                nc.shareVariablesWith(variableSpace);
+            } else {
+                nc.initializeVariablesFrom(null);
+            }
+
+            boolean isConfigurationSet
+                    = configureNamedCluster(siteFilesSource, nc);
+            if (isConfigurationSet) {
+                deleteNamedClusterSchemaOnly(model);
+                setupKnoxSecurity(nc, model);
+                deleteConfigFolder(nc.getName());
+                installSiteFiles(siteFilesSource, nc);
+                namedClusterService.create(nc, metaStore);
+                createConfigProperties(nc);
+                setupKerberosSecurity(model, siteFilesSource, "", "");
+                response.put(NAMED_CLUSTER, nc.getName());
+            }
+        } catch (Exception e) {
+            log.logError(e.getMessage());
+        }
+        return response;
+    }
+
+    private void deleteNamedClusterSchemaOnly(ThinNameClusterModel model) throws MetaStoreException {
+        List<String> existingNcNames = namedClusterService.listNames(metaStore);
+        for (String existingNcName : existingNcNames) {
+            if (existingNcName.equalsIgnoreCase(model.getName())) {
+                namedClusterService.delete(existingNcName, metaStore);
+            }
+        }
+    }
+
+    private NamedCluster convertToNamedCluster(ThinNameClusterModel model) {
+
+        NamedCluster nc = namedClusterService.getClusterTemplate();
+        nc.setName(model.getName());
+        nc.setHdfsHost(model.getHdfsHost());
+        nc.setHdfsPort(model.getHdfsPort());
+        nc.setHdfsUsername(model.getHdfsUsername());
+        nc.setHdfsPassword(encodePassword(model.getHdfsPassword()));
+        nc.setJobTrackerHost(model.getJobTrackerHost());
+        nc.setJobTrackerPort(model.getJobTrackerPort());
+        nc.setZooKeeperHost(model.getZooKeeperHost());
+        nc.setZooKeeperPort(model.getZooKeeperPort());
+        nc.setOozieUrl(model.getOozieUrl());
+        nc.setKafkaBootstrapServers(model.getKafkaBootstrapServers());
+        resolveShimIdentifier(nc);
+        setupKnoxSecurity(nc, model);
+        if (variableSpace != null) {
+            nc.shareVariablesWith(variableSpace);
+        } else {
+            nc.initializeVariablesFrom(null);
+        }
+        return nc;
+    }
+
+    public boolean deleteConfigFolder(String configFolderName) throws IOException {
+        File configFolder = new File(getNamedClusterConfigsRootDir());
+        File[] files = configFolder.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory() && file.getName().equalsIgnoreCase(configFolderName)) {
+                    FileUtils.deleteDirectory(file);
+                    break;
+                }
+            }
+        }
+        return true;
+    }
+
+    public JSONObject createNamedCluster(ThinNameClusterModel model,
+            Map<String, CachedFileItemStream> siteFilesSource) {
+        return createNamedCluster(model, siteFilesSource, "", "");
+    }
+
+    @VisibleForTesting
+    public JSONObject createNamedCluster(ThinNameClusterModel model,
+            Map<String, CachedFileItemStream> siteFilesSource,
+            String keytabAuthenticationLocation, String keytabImpersonationLocation) {
+        JSONObject response = new JSONObject();
+        response.put(NAMED_CLUSTER, "");
+        try {
+            NamedCluster nc = convertToNamedCluster(model);
+            deleteConfigFolder(nc.getName());
+            installSiteFiles(siteFilesSource, nc);
+            namedClusterService.create(nc, metaStore);
+            createConfigProperties(nc);
+            setupKerberosSecurity(model, siteFilesSource, keytabAuthenticationLocation, keytabImpersonationLocation);
+            response.put(NAMED_CLUSTER, nc.getName());
+        } catch (Exception e) {
+            log.logError(e.getMessage());
+        }
+        return response;
+    }
+
+    public JSONObject editNamedCluster(ThinNameClusterModel model, boolean isEditMode,
+            Map<String, CachedFileItemStream> siteFilesSource) {
+        JSONObject response = new JSONObject();
+        response.put(NAMED_CLUSTER, "");
+        try {
+            final NamedCluster newNc = namedClusterService.getNamedClusterByName(model.getName(), metaStore);
+            final NamedCluster oldNc = namedClusterService.getNamedClusterByName(model.getOldName(), metaStore);
+            // Must get the current shim identifier before the creation of the Named Cluster xml schema for later comparison.
+
+            String shimId = null;
+            List<NamedClusterSiteFile> existingSiteFiles = new ArrayList<>();
+            if (oldNc != null) {
+                shimId = oldNc.getShimIdentifier();
+                existingSiteFiles = oldNc.getSiteFiles();
+            }
+            NamedCluster nc = convertToNamedCluster(model);
+            nc.setSiteFiles(getIntersectionSiteFiles(model, existingSiteFiles));
+            installSiteFiles(siteFilesSource, nc);
+            if (newNc != null) {
+                namedClusterService.update(nc, metaStore); //new cluster name exists
+            } else {
+                namedClusterService.create(nc, metaStore); //new cluster does not exist.  Use creation logic
+            }
+
+            File oldConfigFolder = new File(getNamedClusterConfigsRootDir() + fileSeparator + model.getOldName());
+            File newConfigFolder = new File(getNamedClusterConfigsRootDir() + fileSeparator + nc.getName());
+
+            // Copy all files from the old config folder to the new config folder.
+            if (!oldConfigFolder.getName().equalsIgnoreCase(newConfigFolder.getName())) {
+                FileUtils.copyDirectory(oldConfigFolder, newConfigFolder);
+            } else {
+                boolean success = oldConfigFolder.renameTo(newConfigFolder);
+                if (!success) {
+                    log.logError("Renaming Named Cluster configuration folder failed.");
+                }
+            }
+
+            // If the user changed the shim, create a new config.properties file that corresponds to that shim
+            // in the new config folder. Also save the keytab locations to set them again in the new config.properties
+            // unless the kerberos subtype is Password.
+            String keytabAuthenticationLocation = "";
+            String keytabImpersonationLocation = "";
+            String kerberosSubType = model.getKerberosSubType();
+            if (!kerberosSubType.equals(KERBEROS_SUBTYPE.PASSWORD.getValue())) {
+                String configFile
+                        = getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + CONFIG_PROPERTIES;
+                PropertiesConfiguration config = new PropertiesConfiguration(new File(configFile));
+                keytabAuthenticationLocation = (String) config.getProperty(KEYTAB_AUTHENTICATION_LOCATION);
+                keytabImpersonationLocation = (String) config.getProperty(KEYTAB_IMPERSONATION_LOCATION);
+            }
+            if (nc.getShimIdentifier() != null && !nc.getShimIdentifier().equals(shimId)) {
+                createConfigProperties(nc);
+            }
+            setupKerberosSecurity(model, siteFilesSource, keytabAuthenticationLocation, keytabImpersonationLocation);
+
+            // Delete old config folder.
+            if (isEditMode && !oldConfigFolder.getName().equalsIgnoreCase(newConfigFolder.getName())) {
+                deleteNamedCluster(metaStore, model.getOldName(), false);
+            }
+
+            response.put(NAMED_CLUSTER, nc.getName());
+        } catch (Exception e) {
+            log.logError(e.getMessage());
+        }
+        return response;
+    }
+
+    public InputStream getSiteFileInputStream(String namedCluster, String siteFile) {
+        NamedCluster nc = namedClusterService.getNamedClusterByName(namedCluster, this.metaStore);
+        return nc.getSiteFileInputStream(siteFile);
+    }
+
+    public ThinNameClusterModel getNamedCluster(String namedCluster) {
+        ThinNameClusterModel model = null;
+        try {
+            List<NamedCluster> namedClusters = namedClusterService.list(metaStore);
+            for (NamedCluster nc : namedClusters) {
+                if (nc.getName().equalsIgnoreCase(namedCluster)) {
+                    model = new ThinNameClusterModel();
+                    model.setName(nc.getName());
+                    model.setShimIdentifier(nc.getShimIdentifier());
+                    model.setHdfsHost(nc.getHdfsHost());
+                    model.setHdfsUsername(nc.getHdfsUsername());
+                    model.setHdfsPassword(nc.getHdfsPassword());
+                    model.setHdfsPort(nc.getHdfsPort());
+                    model.setJobTrackerHost(nc.getJobTrackerHost());
+                    model.setJobTrackerPort(nc.getJobTrackerPort());
+                    model.setKafkaBootstrapServers(nc.getKafkaBootstrapServers());
+                    model.setOozieUrl(nc.getOozieUrl());
+                    model.setZooKeeperPort(nc.getZooKeeperPort());
+                    model.setZooKeeperHost(nc.getZooKeeperHost());
+                    model.setGatewayPassword(nc.getGatewayPassword());
+                    String gatewayURL = nc.getGatewayUrl();
+                    if (gatewayURL != null && !gatewayURL.startsWith("Encrypted")) {
+                        gatewayURL = encodePassword(gatewayURL);
+                    }
+                    model.setGatewayUrl(gatewayURL);
+                    model.setGatewayUsername(nc.getGatewayUsername());
+                    model.setSecurityType(SECURITY_TYPE.NONE.getValue());
+                    if (nc.isUseGateway()) {
+                        model.setSecurityType(SECURITY_TYPE.KNOX.getValue());
+                    } else {
+                        resolveKerberosSecurity(model, nc);
+                    }
+                    model.setSiteFiles(nc.getSiteFiles().stream()
+                            .map(sf -> new SimpleImmutableEntry<>(NAME_KEY, sf.getSiteFileName()))
+                            .collect(Collectors.toList()));
+                    break;
+                }
+            }
+        } catch (MetaStoreException e) {
+            log.logError(e.getMessage());
+        }
+        return model;
+    }
+
+    private boolean configureNamedCluster(Map<String, CachedFileItemStream> siteFilesSource, NamedCluster nc) {
+        resolveShimIdentifier(nc);
+
+        String oozieBaseUrl = "oozie.base.url";
+        Map<String, String> properties = new HashMap();
+        extractProperties(siteFilesSource, "core-site.xml", properties, new String[]{"fs.defaultFS"});
+        extractProperties(siteFilesSource, "yarn-site.xml", properties,
+                new String[]{"yarn.resourcemanager.address", "yarn.resourcemanager.hostname"});
+        extractProperties(siteFilesSource, "hive-site.xml", properties,
+                new String[]{"hive.zookeeper.quorum", "hive.zookeeper.client.port"});
+        extractProperties(siteFilesSource, "oozie-site.xml", properties, new String[]{oozieBaseUrl});
+        if (properties.get(oozieBaseUrl) == null) {
+            extractProperties(siteFilesSource, "oozie-default.xml", properties, new String[]{oozieBaseUrl});
+        }
+
+        boolean isConfigurationSet = false;
+        /*
      * Address taken from
      * fs.defaultFS
      * in
      * core-site.xml
      * */
-    String hdfsAddress = properties.get( "fs.defaultFS" );
-    if ( hdfsAddress != null ) {
-      URI hdfsURL = URI.create( hdfsAddress );
-      nc.setHdfsHost( hdfsURL.getHost() );
-      nc.setHdfsPort( hdfsURL.getPort() != -1 ? hdfsURL.getPort() + "" : "" );
-      isConfigurationSet = true;
-    }
+        String hdfsAddress = properties.get("fs.defaultFS");
+        if (hdfsAddress != null) {
+            URI hdfsURL = URI.create(hdfsAddress);
+            nc.setHdfsHost(hdfsURL.getHost());
+            nc.setHdfsPort(hdfsURL.getPort() != -1 ? hdfsURL.getPort() + "" : "");
+            isConfigurationSet = true;
+        }
 
-    /*
+        /*
      * Address taken from
      * yarn.resourcemanager.address
      * in
@@ -484,42 +488,42 @@ public class HadoopClusterManager implements RuntimeTestProgressCallback {
      * in
      * yarn-site.xml
      * */
-    String jobTrackerAddress = properties.get( "yarn.resourcemanager.address" );
-    String jobTrackerHostname = properties.get( "yarn.resourcemanager.hostname" );
-    if ( jobTrackerAddress != null ) {
-      Map<String, String> hostAndPort = extractHostAndPort( jobTrackerAddress );
-      nc.setJobTrackerHost( hostAndPort.get( "host" ) );
-      nc.setJobTrackerPort( hostAndPort.get( "port" ) );
-      isConfigurationSet = true;
-    } else if ( jobTrackerHostname != null ) {
-      nc.setJobTrackerHost( jobTrackerHostname );
-      isConfigurationSet = true;
-    }
+        String jobTrackerAddress = properties.get("yarn.resourcemanager.address");
+        String jobTrackerHostname = properties.get("yarn.resourcemanager.hostname");
+        if (jobTrackerAddress != null) {
+            Map<String, String> hostAndPort = extractHostAndPort(jobTrackerAddress);
+            nc.setJobTrackerHost(hostAndPort.get("host"));
+            nc.setJobTrackerPort(hostAndPort.get("port"));
+            isConfigurationSet = true;
+        } else if (jobTrackerHostname != null) {
+            nc.setJobTrackerHost(jobTrackerHostname);
+            isConfigurationSet = true;
+        }
 
-    /*
+        /*
      * Address and port taken from
      * hive.zookeeper.quorum
      * hive.zookeeper.client.port
      * in
      * hive-site.xml
      * */
-    String zooKeeperAddress = properties.get( "hive.zookeeper.quorum" );
-    String zooKeeperPort = properties.get( "hive.zookeeper.client.port" );
+        String zooKeeperAddress = properties.get("hive.zookeeper.quorum");
+        String zooKeeperPort = properties.get("hive.zookeeper.client.port");
 
-    if ( zooKeeperAddress != null ) {
-      List<String> addresses = Arrays.asList( zooKeeperAddress.split( "," ) );
-      List<String> hostNames = addresses.stream().map( address ->
-              extractHostAndPort( address ).get( "host" ) ).collect( Collectors.toList() );
-      zooKeeperAddress = String.join( ",", hostNames );
-    }
+        if (zooKeeperAddress != null) {
+            List<String> addresses = Arrays.asList(zooKeeperAddress.split(","));
+            List<String> hostNames = addresses.stream().map(address
+                    -> extractHostAndPort(address).get("host")).collect(Collectors.toList());
+            zooKeeperAddress = String.join(",", hostNames);
+        }
 
-    if ( zooKeeperAddress != null && zooKeeperPort != null ) {
-      nc.setZooKeeperHost( zooKeeperAddress );
-      nc.setZooKeeperPort( zooKeeperPort );
-      isConfigurationSet = true;
-    }
+        if (zooKeeperAddress != null && zooKeeperPort != null) {
+            nc.setZooKeeperHost(zooKeeperAddress);
+            nc.setZooKeeperPort(zooKeeperPort);
+            isConfigurationSet = true;
+        }
 
-    /*
+        /*
      * Address and port taken from
      * oozie.base.url
      * in
@@ -527,762 +531,805 @@ public class HadoopClusterManager implements RuntimeTestProgressCallback {
      * if it does not exist then it is taken from
      * oozie-default.xml
      * */
-    String oozieAddress = properties.get( oozieBaseUrl );
-    if ( oozieAddress != null ) {
-      nc.setOozieUrl( oozieAddress );
-      isConfigurationSet = true;
+        String oozieAddress = properties.get(oozieBaseUrl);
+        if (oozieAddress != null) {
+            nc.setOozieUrl(oozieAddress);
+            isConfigurationSet = true;
+        }
+
+        return isConfigurationSet;
     }
 
-    return isConfigurationSet;
-  }
-
-  private void resolveShimIdentifier( NamedCluster nc ) {
-    String shimIdentifier = getShimIdentifier();
-    if( shimIdentifier != null ) {
-      nc.setShimIdentifier( shimIdentifier );
+    private void resolveShimIdentifier(NamedCluster nc) {
+        String shimIdentifier = getShimIdentifier();
+        if (shimIdentifier != null) {
+            nc.setShimIdentifier(shimIdentifier);
+        }
     }
-  }
 
-  private void extractProperties( Map<String, CachedFileItemStream> siteFilesSource, String fileName,
-                                  Map<String, String> properties,
-                                  String[] keys ) {
-    CachedFileItemStream siteFile = siteFilesSource.get( fileName );
+    private void extractProperties(Map<String, CachedFileItemStream> siteFilesSource, String fileName,
+            Map<String, String> properties,
+            String[] keys) {
+        CachedFileItemStream siteFile = siteFilesSource.get(fileName);
 
-    if ( siteFile != null ) {
-      Document document = parseSiteFileDocument( siteFile );
-      if ( document != null ) {
-        XPathFactory xpathFactory = XPathFactory.newInstance();
-        XPath xpath = xpathFactory.newXPath();
-        for ( String key : keys ) {
-          try {
-            XPathExpression expr =
-              xpath.compile( "/configuration/property[name[starts-with(.,'" + key + "')]]/value/text()" );
-            NodeList nodes = (NodeList) expr.evaluate( document, XPathConstants.NODESET );
-            if ( nodes.getLength() > 0 ) {
-              properties.put( key, nodes.item( 0 ).getNodeValue() );
+        if (siteFile != null) {
+            Document document = parseSiteFileDocument(siteFile);
+            if (document != null) {
+                XPathFactory xpathFactory = XPathFactory.newInstance();
+                XPath xpath = xpathFactory.newXPath();
+                for (String key : keys) {
+                    try {
+                        XPathExpression expr
+                                = xpath.compile("/configuration/property[name[starts-with(.,'" + key + "')]]/value/text()");
+                        NodeList nodes = (NodeList) expr.evaluate(document, XPathConstants.NODESET);
+                        if (nodes.getLength() > 0) {
+                            properties.put(key, nodes.item(0).getNodeValue());
+                        }
+                    } catch (XPathExpressionException e) {
+                        log.logMinimal(e.getMessage());
+                    }
+                }
             }
-          } catch ( XPathExpressionException e ) {
-            log.logMinimal( e.getMessage() );
-          }
         }
-      }
     }
-  }
 
-  public JSONObject installDriver( FileItemInput driver ) {
-    boolean success = false;
-    if ( driver != null ) {
-      String destination = Const.getShimDriverDeploymentLocation();
+    public JSONObject installDriver(FileItemInput driver) {
+        boolean success = false;
+        if (driver != null) {
+            String destination = Const.getShimDriverDeploymentLocation();
 
-      try ( final InputStream driverStream = driver.getInputStream() ) {
-        FileUtils.copyInputStreamToFile( driverStream,
-          new File( destination + fileSeparator + driver.getFieldName() ) );
-        success = true;
-      } catch ( IOException e ) {
-        log.logError( e.getMessage() );
-      }
+            try (final InputStream driverStream = driver.getInputStream()) {
+                FileUtils.copyInputStreamToFile(driverStream,
+                        new File(destination + fileSeparator + driver.getFieldName()));
+                success = true;
+            } catch (IOException e) {
+                log.logError(e.getMessage());
+            }
+        }
+        JSONObject response = new JSONObject();
+        response.put(INSTALLED, success);
+        return response;
     }
-    JSONObject response = new JSONObject();
-    response.put( INSTALLED, success );
-    return response;
-  }
 
-  /**
-   * Get Intersection of siteFiles
-   *
-   * @param model
-   * @param existingSiteFiles
-   * @return a list of siteFiles at the intersection of siteFiles in the model and the existingSiteFiles
-   */
-  private List<NamedClusterSiteFile> getIntersectionSiteFiles( ThinNameClusterModel model,
-                                                               List<NamedClusterSiteFile> existingSiteFiles ) {
-    List<String> newSiteFileNames =
-      Optional.ofNullable( model.getSiteFiles() )
-        .map( Collection::stream )
-        .orElseGet( Stream::empty )
-        .map( SimpleImmutableEntry::getValue )
-        .collect( Collectors.toList() );
+    /**
+     * Get Intersection of siteFiles
+     *
+     * @param model
+     * @param existingSiteFiles
+     * @return a list of siteFiles at the intersection of siteFiles in the model
+     * and the existingSiteFiles
+     */
+    private List<NamedClusterSiteFile> getIntersectionSiteFiles(ThinNameClusterModel model,
+            List<NamedClusterSiteFile> existingSiteFiles) {
+        List<String> newSiteFileNames
+                = Optional.ofNullable(model.getSiteFiles())
+                        .map(Collection::stream)
+                        .orElseGet(Stream::empty)
+                        .map(SimpleImmutableEntry::getValue)
+                        .collect(Collectors.toList());
 
-    return existingSiteFiles.stream()
-      .filter( siteFile -> newSiteFileNames.contains( siteFile.getSiteFileName() ) )
-      .collect( Collectors.toList() );
-  }
+        return existingSiteFiles.stream()
+                .filter(siteFile -> newSiteFileNames.contains(siteFile.getSiteFileName()))
+                .collect(Collectors.toList());
+    }
 
-  private void installSiteFiles( Map<String, CachedFileItemStream> siteFileSource, NamedCluster nc )
-    throws IOException {
-    for ( Map.Entry<String, CachedFileItemStream> siteFile : siteFileSource.entrySet() ) {
-      String name = siteFile.getValue().getFieldName();
-      if ( isValidConfigurationFile( name ) ) {
-        if ( name.equals( KEYTAB_AUTH_FILE ) || name.equals( KEYTAB_IMPL_FILE ) || !name.endsWith( "-site.xml" ) ) {
-          name = extractFileNameFromFullPath( siteFile.getValue().getName() );
-          addFileToConfigFolder( siteFile.getValue().getCachedOutputStream(), name, nc );
+    private void installSiteFiles(Map<String, CachedFileItemStream> siteFileSource, NamedCluster nc)
+            throws IOException {
+        for (Map.Entry<String, CachedFileItemStream> siteFile : siteFileSource.entrySet()) {
+            String name = siteFile.getValue().getFieldName();
+            if (isValidConfigurationFile(name)) {
+                if (name.equals(KEYTAB_AUTH_FILE) || name.equals(KEYTAB_IMPL_FILE) || !name.endsWith("-site.xml")) {
+                    name = extractFileNameFromFullPath(siteFile.getValue().getName());
+                    addFileToConfigFolder(siteFile.getValue().getCachedOutputStream(), name, nc);
+                } else {
+                    addFileToNamedClusterSiteFiles(siteFile, name, nc);
+                }
+            }
+        }
+    }
+
+    private void addFileToConfigFolder(ByteArrayOutputStream outputStream, String fileName, NamedCluster nc)
+            throws IOException {
+        File destination = new File(
+                getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + fileName);
+        destination.getParentFile().mkdirs();
+        try (OutputStream fos = new FileOutputStream(destination)) {
+            outputStream.writeTo(fos);
+        }
+    }
+
+    private void addFileToNamedClusterSiteFiles(Map.Entry<String, CachedFileItemStream> cachedFileItemStreamMapEntry,
+            String fileName, NamedCluster nc)
+            throws IOException {
+        InputStream inputStream = cachedFileItemStreamMapEntry.getValue().getCachedInputStream();
+        InputStreamReader isReader = new InputStreamReader(inputStream);
+        BufferedReader reader = new BufferedReader(isReader);
+        StringBuilder sb = new StringBuilder();
+        String str;
+        while ((str = reader.readLine()) != null) {
+            sb.append(str);
+        }
+        //skip placeholder site file contents because the site file content is in the NamedCluster already
+        if (!sb.toString().equals(PLACEHOLDER_VALUE)) {
+            boolean nameExists = false;
+            //replace the contents if the name exists
+            for (NamedClusterSiteFile siteFile : nc.getSiteFiles()) {
+                if (siteFile.getSiteFileName().equals(fileName)) {
+                    siteFile.setSiteFileContents(sb.toString());
+                    nameExists = true;
+                    break;
+                }
+            }
+            //Add the file if the name didn't exist
+            if (!nameExists) {
+                nc.addSiteFile(
+                        new NamedClusterSiteFileImpl(fileName, cachedFileItemStreamMapEntry.getValue().getLastModified(),
+                                sb.toString()));
+            }
+        }
+    }
+
+    public boolean isValidConfigurationFile(String fileName) {
+        return fileName != null && (fileName.endsWith("-site.xml") || fileName.endsWith("-default.xml")
+                || fileName.equals(CONFIG_PROPERTIES) || fileName.equals(KEYTAB_AUTH_FILE)
+                || fileName.equals(KEYTAB_IMPL_FILE) || fileName.equals("data"));
+    }
+
+    private Document parseSiteFileDocument(CachedFileItemStream file) {
+        Document document = null;
+        try {
+            document = XMLHandler.loadXMLFile(file.getCachedInputStream());
+        } catch (KettleXMLException e) {
+            log.logMinimal(String.format("Site file %s is not a well formed XML document", file.getName()));
+        }
+        return document;
+    }
+
+    private void createConfigProperties(NamedCluster namedCluster) throws IOException {
+        Path clusterConfigDirPath = Paths.get(getNamedClusterConfigsRootDir() + fileSeparator + namedCluster.getName());
+        Path configPropertiesPath
+                = Paths.get(
+                        getNamedClusterConfigsRootDir() + fileSeparator + namedCluster.getName() + fileSeparator + CONFIG_PROPERTIES);
+        Files.createDirectories(clusterConfigDirPath);
+        String sampleConfigProperties = namedCluster.getShimIdentifier() + "sampleconfig.properties";
+        InputStream inputStream
+                = HadoopClusterDelegateImpl.class.getClassLoader().getResourceAsStream(sampleConfigProperties);
+        if (inputStream != null) {
+            Files.copy(inputStream, configPropertiesPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void setupKerberosSecurity(ThinNameClusterModel model, Map<String, CachedFileItemStream> siteFilesSource,
+            String keytabAuthenticationLocation, String keytabImpersonationLocation) {
+        Path configPropertiesPath
+                = Paths
+                        .get(getNamedClusterConfigsRootDir() + fileSeparator + model.getName() + fileSeparator + CONFIG_PROPERTIES);
+
+        String securityType = model.getSecurityType();
+        if (!StringUtil.isEmpty(securityType)) {
+            resetKerberosSecurity(configPropertiesPath);
+            if (securityType.equals(SECURITY_TYPE.KERBEROS.getValue())) {
+                String kerberosSubType = model.getKerberosSubType();
+                if (kerberosSubType.equals(KERBEROS_SUBTYPE.PASSWORD.getValue())) {
+                    setupKerberosPasswordSecurity(configPropertiesPath, model);
+                }
+                if (kerberosSubType.equals(KERBEROS_SUBTYPE.KEYTAB.getValue())) {
+                    setupKeytabSecurity(model, configPropertiesPath, siteFilesSource, keytabAuthenticationLocation,
+                            keytabImpersonationLocation);
+                }
+            }
+        }
+    }
+
+    private void resetKerberosSecurity(Path configPropertiesPath) {
+        try {
+            PropertiesConfiguration config = new PropertiesConfiguration(configPropertiesPath.toFile());
+            config.setProperty(KEYTAB_AUTHENTICATION_LOCATION, "");
+            config.setProperty(KEYTAB_IMPERSONATION_LOCATION, "");
+            config.setProperty(IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue());
+            config.setProperty(KERBEROS_AUTHENTICATION_USERNAME, "");
+            config.setProperty(KERBEROS_AUTHENTICATION_PASS, "");
+            config.setProperty(KERBEROS_IMPERSONATION_USERNAME, "");
+            config.setProperty(KERBEROS_IMPERSONATION_PASS, "");
+            config.save();
+        } catch (ConfigurationException e) {
+            log.logMinimal(e.getMessage());
+        }
+    }
+
+    private void retrieveKerberosSecurity(ThinNameClusterModel model, NamedCluster nc) {
+        try {
+            String endpointURL = NamedClusterHelper.getEndpointURL("getNamedCluster");
+            endpointURL = endpointURL + "&namedCluster=" + nc.getName();
+            String result = doGet(endpointURL);
+            JSONObject jsonObject = (JSONObject) new JSONParser().parse(result);
+            String securityType = (String) jsonObject.get("securityType");
+            String kerberosSubType = (String) jsonObject.get("kerberosSubType");
+            String kerberosAuthenticationUsername = (String) jsonObject.get("kerberosAuthenticationUsername");
+            String kerberosAuthenticationPassword = (String) jsonObject.get("kerberosAuthenticationPassword");
+            String kerberosImpersonationUsername = (String) jsonObject.get("kerberosImpersonationUsername");
+            String kerberosImpersonationPassword = (String) jsonObject.get("kerberosImpersonationPassword");
+            String keytabAuthFile = (String) jsonObject.get("keytabAuthFile");
+            String keytabImpFile = (String) jsonObject.get("keytabImpFile");
+
+            model.setSecurityType(securityType);
+            model.setKerberosSubType(kerberosSubType);
+            model.setKerberosAuthenticationUsername(kerberosAuthenticationUsername);
+            model.setKerberosAuthenticationPassword(kerberosAuthenticationPassword);
+            model.setKerberosImpersonationUsername(kerberosImpersonationUsername);
+            model.setKerberosImpersonationPassword(kerberosImpersonationPassword);
+            model.setKeytabAuthFile(keytabAuthFile);
+            model.setKeytabImpFile(keytabImpFile);
+        } catch (ParseException e) {
+            log.logError(e.getMessage());
+        }
+    }
+
+    private void resolveKerberosSecurity(ThinNameClusterModel model, NamedCluster nc) {
+        if (NamedClusterHelper.isConnectedToRepo()) {
+            retrieveKerberosSecurity(model, nc);
         } else {
-          addFileToNamedClusterSiteFiles( siteFile, name, nc );
+            try {
+                String configFile
+                        = getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + CONFIG_PROPERTIES;
+                PropertiesConfiguration config = new PropertiesConfiguration(new File(configFile));
+                model.setKerberosAuthenticationUsername((String) config.getProperty(KERBEROS_AUTHENTICATION_USERNAME));
+                model.setKerberosAuthenticationPassword((String) config.getProperty(KERBEROS_AUTHENTICATION_PASS));
+                model.setKerberosImpersonationUsername((String) config.getProperty(KERBEROS_IMPERSONATION_USERNAME));
+                model.setKerberosImpersonationPassword((String) config.getProperty(KERBEROS_IMPERSONATION_PASS));
+                String keytabAuthenticationLocation = (String) config.getProperty(KEYTAB_AUTHENTICATION_LOCATION);
+                String keytabImpersonationLocation = (String) config.getProperty(KEYTAB_IMPERSONATION_LOCATION);
+
+                // Resolve the keytab auth and impl files if set to be displayed in the UI.
+                if (!StringUtil.isEmpty(keytabAuthenticationLocation)) {
+                    model.setKeytabAuthFile(keytabAuthenticationLocation);
+                }
+                if (!StringUtil.isEmpty(keytabImpersonationLocation)) {
+                    model.setKeytabImpFile(keytabImpersonationLocation);
+                }
+
+                // If Kerberos security properties are empty then security type is None else if at least one of them has a
+                // value then the security type is Kerberos
+                if (StringUtil.isEmpty(keytabAuthenticationLocation)
+                        && StringUtil.isEmpty(keytabImpersonationLocation)
+                        && StringUtil.isEmpty(model.getKerberosAuthenticationPassword())
+                        && StringUtil.isEmpty(model.getKerberosImpersonationPassword())) {
+                    model.setSecurityType(SECURITY_TYPE.NONE.getValue());
+                } else {
+                    model.setSecurityType(SECURITY_TYPE.KERBEROS.getValue());
+                }
+
+                // If kerberos keytab impersonation and kerberos keytab impersonation location are empty then kerberos sub type
+                // is Password else is Keytab
+                if (StringUtil.isEmpty(keytabAuthenticationLocation)
+                        && StringUtil.isEmpty(keytabImpersonationLocation)) {
+                    model.setKerberosSubType(KERBEROS_SUBTYPE.PASSWORD.getValue());
+                } else {
+                    model.setKerberosSubType(KERBEROS_SUBTYPE.KEYTAB.getValue());
+                }
+            } catch (ConfigurationException e) {
+                log.logError(e.getMessage());
+            }
         }
-      }
     }
-  }
 
-  private void addFileToConfigFolder( ByteArrayOutputStream outputStream, String fileName, NamedCluster nc )
-    throws IOException {
-    File destination = new File(
-      getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + fileName );
-    destination.getParentFile().mkdirs();
-    try ( OutputStream fos = new FileOutputStream( destination ) ) {
-      outputStream.writeTo( fos );
-    }
-  }
-
-  private void addFileToNamedClusterSiteFiles( Map.Entry<String, CachedFileItemStream> cachedFileItemStreamMapEntry,
-                                               String fileName, NamedCluster nc )
-    throws IOException {
-    InputStream inputStream = cachedFileItemStreamMapEntry.getValue().getCachedInputStream();
-    InputStreamReader isReader = new InputStreamReader( inputStream );
-    BufferedReader reader = new BufferedReader( isReader );
-    StringBuilder sb = new StringBuilder();
-    String str;
-    while ( ( str = reader.readLine() ) != null ) {
-      sb.append( str );
-    }
-    //skip placeholder site file contents because the site file content is in the NamedCluster already
-    if ( !sb.toString().equals( PLACEHOLDER_VALUE ) ) {
-      boolean nameExists = false;
-      //replace the contents if the name exists
-      for ( NamedClusterSiteFile siteFile : nc.getSiteFiles() ) {
-        if ( siteFile.getSiteFileName().equals( fileName ) ) {
-          siteFile.setSiteFileContents( sb.toString() );
-          nameExists = true;
-          break;
+    private void setupKerberosPasswordSecurity(Path configPropertiesPath, ThinNameClusterModel model) {
+        try {
+            PropertiesConfiguration config = new PropertiesConfiguration(configPropertiesPath.toFile());
+            config.setProperty(KERBEROS_AUTHENTICATION_USERNAME, model.getKerberosAuthenticationUsername());
+            if (!StringUtil.isEmpty(model.getKerberosAuthenticationPassword())) {
+                config.setProperty(KERBEROS_AUTHENTICATION_PASS,
+                        encodePassword(model.getKerberosAuthenticationPassword()));
+            } else {
+                config.setProperty(KERBEROS_AUTHENTICATION_PASS, "");
+            }
+            config.setProperty(KERBEROS_IMPERSONATION_USERNAME, model.getKerberosImpersonationUsername());
+            if (!StringUtil.isEmpty(model.getKerberosImpersonationPassword())) {
+                config.setProperty(KERBEROS_IMPERSONATION_PASS,
+                        encodePassword(model.getKerberosImpersonationPassword()));
+            } else {
+                config.setProperty(KERBEROS_IMPERSONATION_PASS, "");
+            }
+            if ((!StringUtil.isEmpty(model.getKerberosImpersonationUsername())
+                    && !StringUtil.isEmpty(model.getKerberosImpersonationPassword()))
+                    || (!StringUtil.isEmpty(model.getKerberosAuthenticationUsername())
+                    && !StringUtil.isEmpty(model.getKerberosAuthenticationPassword()))) {
+                config.setProperty(IMPERSONATION, IMPERSONATION_TYPE.SIMPLE.getValue());
+            } else {
+                config.setProperty(IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue());
+            }
+            config.save();
+        } catch (ConfigurationException e) {
+            log.logMinimal(e.getMessage());
         }
-      }
-      //Add the file if the name didn't exist
-      if ( !nameExists ) {
-        nc.addSiteFile(
-          new NamedClusterSiteFileImpl( fileName, cachedFileItemStreamMapEntry.getValue().getLastModified(),
-            sb.toString() ) );
-      }
     }
-  }
 
-  public boolean isValidConfigurationFile( String fileName ) {
-    return fileName != null && ( fileName.endsWith( "-site.xml" ) || fileName.endsWith( "-default.xml" )
-      || fileName.equals( CONFIG_PROPERTIES ) || fileName.equals( KEYTAB_AUTH_FILE )
-      || fileName.equals( KEYTAB_IMPL_FILE ) || fileName.equals( "data" ) );
-  }
-
-  private Document parseSiteFileDocument( CachedFileItemStream file ) {
-    Document document = null;
-    try {
-      document = XMLHandler.loadXMLFile( file.getCachedInputStream() );
-    } catch ( KettleXMLException e ) {
-      log.logMinimal( String.format( "Site file %s is not a well formed XML document", file.getName() ) );
-    }
-    return document;
-  }
-
-  private void createConfigProperties( NamedCluster namedCluster ) throws IOException {
-    Path clusterConfigDirPath = Paths.get( getNamedClusterConfigsRootDir() + fileSeparator + namedCluster.getName() );
-    Path
-      configPropertiesPath =
-      Paths.get(
-        getNamedClusterConfigsRootDir() + fileSeparator + namedCluster.getName() + fileSeparator + CONFIG_PROPERTIES );
-    Files.createDirectories( clusterConfigDirPath );
-    String sampleConfigProperties = namedCluster.getShimIdentifier() + "sampleconfig.properties";
-    InputStream
-      inputStream =
-      HadoopClusterDelegateImpl.class.getClassLoader().getResourceAsStream( sampleConfigProperties );
-    if ( inputStream != null ) {
-      Files.copy( inputStream, configPropertiesPath, StandardCopyOption.REPLACE_EXISTING );
-    }
-  }
-
-  private void setupKerberosSecurity( ThinNameClusterModel model, Map<String, CachedFileItemStream> siteFilesSource,
-                                      String keytabAuthenticationLocation, String keytabImpersonationLocation ) {
-    Path
-      configPropertiesPath =
-      Paths
-        .get( getNamedClusterConfigsRootDir() + fileSeparator + model.getName() + fileSeparator + CONFIG_PROPERTIES );
-
-    String securityType = model.getSecurityType();
-    if ( !StringUtil.isEmpty( securityType ) ) {
-      resetKerberosSecurity( configPropertiesPath );
-      if ( securityType.equals( SECURITY_TYPE.KERBEROS.getValue() ) ) {
-        String kerberosSubType = model.getKerberosSubType();
-        if ( kerberosSubType.equals( KERBEROS_SUBTYPE.PASSWORD.getValue() ) ) {
-          setupKerberosPasswordSecurity( configPropertiesPath, model );
-        }
-        if ( kerberosSubType.equals( KERBEROS_SUBTYPE.KEYTAB.getValue() ) ) {
-          setupKeytabSecurity( model, configPropertiesPath, siteFilesSource, keytabAuthenticationLocation,
-            keytabImpersonationLocation );
-        }
-      }
-    }
-  }
-
-  private void resetKerberosSecurity( Path configPropertiesPath ) {
-    try {
-      PropertiesConfiguration config = new PropertiesConfiguration( configPropertiesPath.toFile() );
-      config.setProperty( KEYTAB_AUTHENTICATION_LOCATION, "" );
-      config.setProperty( KEYTAB_IMPERSONATION_LOCATION, "" );
-      config.setProperty( IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue() );
-      config.setProperty( KERBEROS_AUTHENTICATION_USERNAME, "" );
-      config.setProperty( KERBEROS_AUTHENTICATION_PASS, "" );
-      config.setProperty( KERBEROS_IMPERSONATION_USERNAME, "" );
-      config.setProperty( KERBEROS_IMPERSONATION_PASS, "" );
-      config.save();
-    } catch ( ConfigurationException e ) {
-      log.logMinimal( e.getMessage() );
-    }
-  }
-
-  private void retrieveKerberosSecurity( ThinNameClusterModel model, NamedCluster nc ) {
-    try {
-      String endpointURL = NamedClusterHelper.getEndpointURL( "getNamedCluster" );
-      endpointURL = endpointURL + "&namedCluster=" + nc.getName();
-      String result = doGet( endpointURL );
-      JSONObject jsonObject = (JSONObject) new JSONParser().parse( result );
-      String securityType = (String) jsonObject.get( "securityType" );
-      String kerberosSubType = (String) jsonObject.get( "kerberosSubType" );
-      String kerberosAuthenticationUsername = (String) jsonObject.get( "kerberosAuthenticationUsername" );
-      String kerberosAuthenticationPassword = (String) jsonObject.get( "kerberosAuthenticationPassword" );
-      String kerberosImpersonationUsername = (String) jsonObject.get( "kerberosImpersonationUsername" );
-      String kerberosImpersonationPassword = (String) jsonObject.get( "kerberosImpersonationPassword" );
-      String keytabAuthFile = (String) jsonObject.get( "keytabAuthFile" );
-      String keytabImpFile = (String) jsonObject.get( "keytabImpFile" );
-
-      model.setSecurityType( securityType );
-      model.setKerberosSubType( kerberosSubType );
-      model.setKerberosAuthenticationUsername( kerberosAuthenticationUsername );
-      model.setKerberosAuthenticationPassword( kerberosAuthenticationPassword );
-      model.setKerberosImpersonationUsername( kerberosImpersonationUsername );
-      model.setKerberosImpersonationPassword( kerberosImpersonationPassword );
-      model.setKeytabAuthFile( keytabAuthFile );
-      model.setKeytabImpFile( keytabImpFile );
-    } catch ( ParseException e  ) {
-      log.logError( e.getMessage() );
-    }
-  }
-
-  private void resolveKerberosSecurity( ThinNameClusterModel model, NamedCluster nc ) {
-    if ( NamedClusterHelper.isConnectedToRepo() ) {
-      retrieveKerberosSecurity( model, nc );
-    } else {
-      try {
-        String configFile =
-          getNamedClusterConfigsRootDir() + fileSeparator + nc.getName() + fileSeparator + CONFIG_PROPERTIES;
-        PropertiesConfiguration config = new PropertiesConfiguration( new File( configFile ) );
-        model.setKerberosAuthenticationUsername( (String) config.getProperty( KERBEROS_AUTHENTICATION_USERNAME ) );
-        model.setKerberosAuthenticationPassword( (String) config.getProperty( KERBEROS_AUTHENTICATION_PASS ) );
-        model.setKerberosImpersonationUsername( (String) config.getProperty( KERBEROS_IMPERSONATION_USERNAME ) );
-        model.setKerberosImpersonationPassword( (String) config.getProperty( KERBEROS_IMPERSONATION_PASS ) );
-        String keytabAuthenticationLocation = (String) config.getProperty( KEYTAB_AUTHENTICATION_LOCATION );
-        String keytabImpersonationLocation = (String) config.getProperty( KEYTAB_IMPERSONATION_LOCATION );
-
-        // Resolve the keytab auth and impl files if set to be displayed in the UI.
-        if ( !StringUtil.isEmpty( keytabAuthenticationLocation ) ) {
-          model.setKeytabAuthFile( keytabAuthenticationLocation );
-        }
-        if ( !StringUtil.isEmpty( keytabImpersonationLocation ) ) {
-          model.setKeytabImpFile( keytabImpersonationLocation );
-        }
-
-        // If Kerberos security properties are empty then security type is None else if at least one of them has a
-        // value then the security type is Kerberos
-        if ( StringUtil.isEmpty( keytabAuthenticationLocation )
-          && StringUtil.isEmpty( keytabImpersonationLocation )
-          && StringUtil.isEmpty( model.getKerberosAuthenticationPassword() )
-          && StringUtil.isEmpty( model.getKerberosImpersonationPassword() ) ) {
-          model.setSecurityType( SECURITY_TYPE.NONE.getValue() );
-        } else {
-          model.setSecurityType( SECURITY_TYPE.KERBEROS.getValue() );
-        }
-
-        // If kerberos keytab impersonation and kerberos keytab impersonation location are empty then kerberos sub type
-        // is Password else is Keytab
-        if ( StringUtil.isEmpty( keytabAuthenticationLocation )
-          && StringUtil.isEmpty( keytabImpersonationLocation ) ) {
-          model.setKerberosSubType( KERBEROS_SUBTYPE.PASSWORD.getValue() );
-        } else {
-          model.setKerberosSubType( KERBEROS_SUBTYPE.KEYTAB.getValue() );
-        }
-      } catch ( ConfigurationException e ) {
-        log.logError( e.getMessage() );
-      }
-    }
-  }
-
-  private void setupKerberosPasswordSecurity( Path configPropertiesPath, ThinNameClusterModel model ) {
-    try {
-      PropertiesConfiguration config = new PropertiesConfiguration( configPropertiesPath.toFile() );
-      config.setProperty( KERBEROS_AUTHENTICATION_USERNAME, model.getKerberosAuthenticationUsername() );
-      if ( !StringUtil.isEmpty( model.getKerberosAuthenticationPassword() ) ) {
-        config.setProperty( KERBEROS_AUTHENTICATION_PASS,
-          encodePassword( model.getKerberosAuthenticationPassword() ) );
-      } else {
-        config.setProperty( KERBEROS_AUTHENTICATION_PASS, "" );
-      }
-      config.setProperty( KERBEROS_IMPERSONATION_USERNAME, model.getKerberosImpersonationUsername() );
-      if ( !StringUtil.isEmpty( model.getKerberosImpersonationPassword() ) ) {
-        config.setProperty( KERBEROS_IMPERSONATION_PASS,
-          encodePassword( model.getKerberosImpersonationPassword() ) );
-      } else {
-        config.setProperty( KERBEROS_IMPERSONATION_PASS, "" );
-      }
-      if ( ( !StringUtil.isEmpty( model.getKerberosImpersonationUsername() )
-        && !StringUtil.isEmpty( model.getKerberosImpersonationPassword() ) )
-        || ( !StringUtil.isEmpty( model.getKerberosAuthenticationUsername() )
-        && !StringUtil.isEmpty( model.getKerberosAuthenticationPassword() ) ) ) {
-        config.setProperty( IMPERSONATION, IMPERSONATION_TYPE.SIMPLE.getValue() );
-      } else {
-        config.setProperty( IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue() );
-      }
-      config.save();
-    } catch ( ConfigurationException e ) {
-      log.logMinimal( e.getMessage() );
-    }
-  }
-
-  private String extractFileNameFromFullPath( String fileName ) {
-    /*
+    private String extractFileNameFromFullPath(String fileName) {
+        /*
      * This method is necessary because a difference in upload functionality from Linux and Windows.
      * On Linux the file uploaded is provided with the name only.
      * On Windows the file uploaded is provided with the full path and we only need the name.
      * */
-    int lastIndex = fileName.lastIndexOf( '/' ) != -1 ? fileName.lastIndexOf( '/' ) : fileName.lastIndexOf( '\\' );
-    lastIndex = lastIndex == -1 ? 0 : lastIndex + 1;
-    fileName = fileName.substring( lastIndex );
-    return fileName;
-  }
-
-  private void setupKeytabSecurity( ThinNameClusterModel model, Path configPropertiesPath,
-                                    Map<String, CachedFileItemStream> siteFilesSource,
-                                    String keytabAuthenticationLocation, String keytabImpersonationLocation ) {
-    String namedClusterName = model.getName();
-    CachedFileItemStream keytabImpFile = siteFilesSource.get( KEYTAB_IMPL_FILE );
-
-    // Process the keytabAuthenticationLocation in case the Named Cluster name changed.
-    // If it didn't then the resulting value should be the same.
-    // Required for deleting orphaned keytab files.
-    if ( !keytabAuthenticationLocation.isEmpty() ) {
-      String name = extractFileNameFromFullPath( keytabAuthenticationLocation );
-      keytabAuthenticationLocation =
-        getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
-    }
-    // Process the keytabImpersonationLocation in case the Named Cluster name changed.
-    // If it didn't then the resulting value should be the same.
-    if ( !keytabImpersonationLocation.isEmpty() ) {
-      String name = extractFileNameFromFullPath( keytabImpersonationLocation );
-      keytabImpersonationLocation =
-        getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
+        int lastIndex = fileName.lastIndexOf('/') != -1 ? fileName.lastIndexOf('/') : fileName.lastIndexOf('\\');
+        lastIndex = lastIndex == -1 ? 0 : lastIndex + 1;
+        fileName = fileName.substring(lastIndex);
+        return fileName;
     }
 
-    String authenticationLocation = keytabAuthenticationLocation;
-    String impersonationLocation = keytabImpersonationLocation;
+    private void setupKeytabSecurity(ThinNameClusterModel model, Path configPropertiesPath,
+            Map<String, CachedFileItemStream> siteFilesSource,
+            String keytabAuthenticationLocation, String keytabImpersonationLocation) {
+        String namedClusterName = model.getName();
+        CachedFileItemStream keytabImpFile = siteFilesSource.get(KEYTAB_IMPL_FILE);
 
-    if ( model.getKeytabAuthFile() != null && !model.getKeytabAuthFile().isEmpty() ) {
-      String name = extractFileNameFromFullPath( model.getKeytabAuthFile() );
-      authenticationLocation =
-        getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
-    }
-
-    if ( model.getKeytabImpFile() != null && !model.getKeytabImpFile().isEmpty() ) {
-      String name = extractFileNameFromFullPath( model.getKeytabImpFile() );
-      impersonationLocation =
-        getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
-    }
-
-    try {
-      PropertiesConfiguration config = new PropertiesConfiguration( configPropertiesPath.toFile() );
-      // Authentication
-      config.setProperty( KERBEROS_AUTHENTICATION_USERNAME, model.getKerberosAuthenticationUsername() );
-      if ( !StringUtil.isEmpty( authenticationLocation ) ) {
-        config.setProperty( KEYTAB_AUTHENTICATION_LOCATION, authenticationLocation );
-      }
-
-      // Impersonation
-      config.setProperty( KERBEROS_IMPERSONATION_USERNAME, model.getKerberosImpersonationUsername() );
-      if ( keytabImpFile == null && StringUtil.isEmpty( model.getKeytabImpFile() ) ) {
-        config.setProperty( KEYTAB_IMPERSONATION_LOCATION, "" );
-      } else if ( !StringUtil.isEmpty( impersonationLocation ) ) {
-        config.setProperty( KEYTAB_IMPERSONATION_LOCATION, impersonationLocation );
-      }
-
-      // If the keytabAuthFile is not used anymore delete it.
-      if ( !keytabAuthenticationLocation.isEmpty() ) {
-        if ( !keytabAuthenticationLocation.equals( authenticationLocation ) ) {
-          if ( !keytabAuthenticationLocation.equals( impersonationLocation ) ) {
-            File toDelete = new File( keytabAuthenticationLocation );
-            if ( toDelete.exists() ) {
-              toDelete.delete();
-            }
-          }
+        // Process the keytabAuthenticationLocation in case the Named Cluster name changed.
+        // If it didn't then the resulting value should be the same.
+        // Required for deleting orphaned keytab files.
+        if (!keytabAuthenticationLocation.isEmpty()) {
+            String name = extractFileNameFromFullPath(keytabAuthenticationLocation);
+            keytabAuthenticationLocation
+                    = getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
         }
-      }
-
-      // If the keytabImpFile is not used anymore delete it.
-      if ( !keytabImpersonationLocation.isEmpty() ) {
-        if ( !keytabImpersonationLocation.equals( impersonationLocation ) || model.getKeytabImpFile().isEmpty() ) {
-          if ( !keytabImpersonationLocation.equals( authenticationLocation ) ) {
-            File toDelete = new File( keytabImpersonationLocation );
-            if ( toDelete.exists() ) {
-              toDelete.delete();
-            }
-          }
+        // Process the keytabImpersonationLocation in case the Named Cluster name changed.
+        // If it didn't then the resulting value should be the same.
+        if (!keytabImpersonationLocation.isEmpty()) {
+            String name = extractFileNameFromFullPath(keytabImpersonationLocation);
+            keytabImpersonationLocation
+                    = getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
         }
-      }
 
-      if ( !StringUtil.isEmpty( (String) config.getProperty( KEYTAB_AUTHENTICATION_LOCATION ) )
-        || !StringUtil.isEmpty( (String) config.getProperty( KEYTAB_IMPERSONATION_LOCATION ) ) ) {
-        config.setProperty( IMPERSONATION, IMPERSONATION_TYPE.SIMPLE.getValue() );
-      } else {
-        config.setProperty( IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue() );
-      }
+        String authenticationLocation = keytabAuthenticationLocation;
+        String impersonationLocation = keytabImpersonationLocation;
 
-      config.save();
-    } catch ( ConfigurationException e ) {
-      log.logMinimal( e.getMessage() );
+        if (model.getKeytabAuthFile() != null && !model.getKeytabAuthFile().isEmpty()) {
+            String name = extractFileNameFromFullPath(model.getKeytabAuthFile());
+            authenticationLocation
+                    = getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
+        }
+
+        if (model.getKeytabImpFile() != null && !model.getKeytabImpFile().isEmpty()) {
+            String name = extractFileNameFromFullPath(model.getKeytabImpFile());
+            impersonationLocation
+                    = getNamedClusterConfigsRootDir() + fileSeparator + namedClusterName + fileSeparator + name;
+        }
+
+        try {
+            PropertiesConfiguration config = new PropertiesConfiguration(configPropertiesPath.toFile());
+            // Authentication
+            config.setProperty(KERBEROS_AUTHENTICATION_USERNAME, model.getKerberosAuthenticationUsername());
+            if (!StringUtil.isEmpty(authenticationLocation)) {
+                config.setProperty(KEYTAB_AUTHENTICATION_LOCATION, authenticationLocation);
+            }
+
+            // Impersonation
+            config.setProperty(KERBEROS_IMPERSONATION_USERNAME, model.getKerberosImpersonationUsername());
+            if (keytabImpFile == null && StringUtil.isEmpty(model.getKeytabImpFile())) {
+                config.setProperty(KEYTAB_IMPERSONATION_LOCATION, "");
+            } else if (!StringUtil.isEmpty(impersonationLocation)) {
+                config.setProperty(KEYTAB_IMPERSONATION_LOCATION, impersonationLocation);
+            }
+
+            // If the keytabAuthFile is not used anymore delete it.
+            if (!keytabAuthenticationLocation.isEmpty()) {
+                if (!keytabAuthenticationLocation.equals(authenticationLocation)) {
+                    if (!keytabAuthenticationLocation.equals(impersonationLocation)) {
+                        File toDelete = new File(keytabAuthenticationLocation);
+                        if (toDelete.exists()) {
+                            toDelete.delete();
+                        }
+                    }
+                }
+            }
+
+            // If the keytabImpFile is not used anymore delete it.
+            if (!keytabImpersonationLocation.isEmpty()) {
+                if (!keytabImpersonationLocation.equals(impersonationLocation) || model.getKeytabImpFile().isEmpty()) {
+                    if (!keytabImpersonationLocation.equals(authenticationLocation)) {
+                        File toDelete = new File(keytabImpersonationLocation);
+                        if (toDelete.exists()) {
+                            toDelete.delete();
+                        }
+                    }
+                }
+            }
+
+            if (!StringUtil.isEmpty((String) config.getProperty(KEYTAB_AUTHENTICATION_LOCATION))
+                    || !StringUtil.isEmpty((String) config.getProperty(KEYTAB_IMPERSONATION_LOCATION))) {
+                config.setProperty(IMPERSONATION, IMPERSONATION_TYPE.SIMPLE.getValue());
+            } else {
+                config.setProperty(IMPERSONATION, IMPERSONATION_TYPE.DISABLED.getValue());
+            }
+
+            config.save();
+        } catch (ConfigurationException e) {
+            log.logMinimal(e.getMessage());
+        }
     }
-  }
 
-  private void setupKnoxSecurity( NamedCluster nc, ThinNameClusterModel model ) {
-    if ( model.getSecurityType() != null && model.getSecurityType().equals( SECURITY_TYPE.KNOX.getValue() ) ) {
-      String userName = model.getGatewayUsername();
-      String url = model.getGatewayUrl();
-      String password = model.getGatewayPassword();
-      nc.setGatewayPassword( encodePassword( password ) );
-      nc.setGatewayUrl( encodePassword( url ) );
-      nc.setGatewayUsername( userName );
-      nc.setUseGateway(
-        !StringUtil.isEmpty( userName ) && !StringUtil.isEmpty( url ) && !StringUtil.isEmpty( password ) );
+    private void setupKnoxSecurity(NamedCluster nc, ThinNameClusterModel model) {
+        if (model.getSecurityType() != null && model.getSecurityType().equals(SECURITY_TYPE.KNOX.getValue())) {
+            String userName = model.getGatewayUsername();
+            String url = model.getGatewayUrl();
+            String password = model.getGatewayPassword();
+            nc.setGatewayPassword(encodePassword(password));
+            nc.setGatewayUrl(encodePassword(url));
+            nc.setGatewayUsername(userName);
+            nc.setUseGateway(
+                    !StringUtil.isEmpty(userName) && !StringUtil.isEmpty(url) && !StringUtil.isEmpty(password));
+        }
     }
-  }
 
-  /*
+    /*
    * Extract Hostname and Port from a hostname/URL pattern
-   */
-  private Map<String, String> extractHostAndPort( String urlPattern ) {
-    final String HTTP_PATTERN = "http://";
-    if ( !urlPattern.startsWith( HTTP_PATTERN ) ) {
-      urlPattern = HTTP_PATTERN + urlPattern;
+     */
+    private Map<String, String> extractHostAndPort(String urlPattern) {
+        final String HTTP_PATTERN = "http://";
+        if (!urlPattern.startsWith(HTTP_PATTERN)) {
+            urlPattern = HTTP_PATTERN + urlPattern;
+        }
+        URI parsedURI = URI.create(urlPattern);
+        Map<String, String> map = new HashMap<>();
+        map.put("host", parsedURI.getHost());
+        map.put("port", parsedURI.getPort() != -1 ? parsedURI.getPort() + "" : "");
+        return map;
     }
-    URI parsedURI = URI.create( urlPattern );
-    Map<String, String> map = new HashMap<>();
-    map.put( "host", parsedURI.getHost() );
-    map.put( "port", parsedURI.getPort() != -1 ? parsedURI.getPort() + "" : "" );
-    return map;
-  }
 
-  public void deleteNamedCluster( IMetaStore metaStore, String namedCluster, boolean refreshTree ) {
-    try {
-      if ( namedClusterService.read( namedCluster, metaStore ) != null ) {
-        namedClusterService.delete( namedCluster, metaStore );
-        if ( isConnectedToRepo() ) {
-          String endpointURL = NamedClusterHelper.getEndpointURL( "deleteNamedCluster" );
-          endpointURL = endpointURL + "&namedCluster=" + namedCluster;
-          doGet( endpointURL );
+    public void deleteNamedCluster(IMetaStore metaStore, String namedCluster, boolean refreshTree) {
+        try {
+            if (namedClusterService.read(namedCluster, metaStore) != null) {
+                namedClusterService.delete(namedCluster, metaStore);
+                if (isConnectedToRepo()) {
+                    String endpointURL = NamedClusterHelper.getEndpointURL("deleteNamedCluster");
+                    endpointURL = endpointURL + "&namedCluster=" + namedCluster;
+                    doGet(endpointURL);
+                } else {
+                    deleteConfigFolder(namedCluster);
+                }
+            }
+            if (refreshTree) {
+                refreshTree();
+            }
+        } catch (Exception e) {
+            log.logMinimal(e.getMessage());
+        }
+    }
+
+    public String getShimIdentifier() {
+        String shimIdentifier = null;
+        if (isConnectedToRepo()) {
+            String endpointURL = NamedClusterHelper.getEndpointURL("getShimIdentifier");
+            shimIdentifier = doGet(endpointURL);
         } else {
-          deleteConfigFolder( namedCluster );
+            shimIdentifier = BigDataServicesHelper.getShimIdentifier();
         }
-      }
-      if ( refreshTree ) {
-        refreshTree();
-      }
-    } catch ( Exception e ) {
-      log.logMinimal( e.getMessage() );
+        return shimIdentifier;
     }
-  }
 
-  public String getShimIdentifier() {
-    String shimIdentifier = null;
-    if ( isConnectedToRepo() ) {
-      String endpointURL = NamedClusterHelper.getEndpointURL( "getShimIdentifier" );
-      shimIdentifier = doGet( endpointURL );
-    } else {
-      shimIdentifier = BigDataServicesHelper.getShimIdentifier();
+    public NamedCluster getNamedClusterByName(String namedCluster) {
+        return namedClusterService.getNamedClusterByName(namedCluster, this.metaStore);
     }
-    return shimIdentifier;
-  }
 
-  public NamedCluster getNamedClusterByName( String namedCluster) {
-    return namedClusterService.getNamedClusterByName( namedCluster, this.metaStore );
-  }
-
-  public Object runTests( RuntimeTester runtimeTester, String namedCluster ) {
-    NamedCluster nc = namedClusterService.getNamedClusterByName( namedCluster, this.metaStore );
-    if ( nc != null ) {
-      try {
-        if ( runtimeTester != null ) {
-          runtimeTestStatus = null;
-          runtimeTester.runtimeTest( nc, this );
-          synchronized ( this ) {
-            while ( runtimeTestStatus == null ) {
-              wait();
+    public Object runTests(RuntimeTester runtimeTester, String namedCluster) {
+        NamedCluster nc = namedClusterService.getNamedClusterByName(namedCluster, this.metaStore);
+        if (nc != null) {
+            try {
+                if (runtimeTester != null) {
+                    runtimeTestStatus = null;
+                    runtimeTester.runtimeTest(nc, this);
+                    synchronized (this) {
+                        while (runtimeTestStatus == null) {
+                            wait();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.logMinimal(e.getLocalizedMessage());
             }
-          }
+            return produceTestCategories(runtimeTestStatus, nc);
+        } else {
+            return "[]";
         }
-      } catch ( Exception e ) {
-        log.logMinimal( e.getLocalizedMessage() );
-      }
-      return produceTestCategories( runtimeTestStatus, nc );
-    } else {
-      return "[]";
     }
-  }
 
-  public Object[] produceTestCategories( RuntimeTestStatus runtimeTestStatus, NamedCluster nc ) {
-    LinkedHashMap<String, TestCategory> categories = new LinkedHashMap<>();
-    if ( NamedClusterHelper.isConnectedToRepo() ) {
-      String endpointURL = NamedClusterHelper.getEndpointURL( "runTests" );
-      endpointURL = endpointURL + "&namedCluster=" + nc.getName();
-      String result = doGet( endpointURL );
-      ObjectMapper mapper = new ObjectMapper();
-      try {
-        return mapper.readValue( result, TestCategory[].class );
-      } catch ( Exception e ) {
-        log.logError( e.getMessage() );
-      }
-    } else {
-      categories.put( HADOOP_FILE_SYSTEM, new TestCategory( "Hadoop file system" ) );
-      categories.put( ZOOKEEPER, new TestCategory( "Zookeeper connection" ) );
-      categories.put( MAP_REDUCE, new TestCategory( "Job tracker / resource manager" ) );
-      categories.put( OOZIE, new TestCategory( "Oozie host connection" ) );
-      categories.put( KAFKA, new TestCategory( "Kafka connection" ) );
-
-      if ( runtimeTestStatus != null && nc != null ) {
-        for ( RuntimeTestModuleResults moduleResults : runtimeTestStatus.getModuleResults() ) {
-          for ( RuntimeTestResult testResult : moduleResults.getRuntimeTestResults() ) {
-            RuntimeTest runtimeTest = testResult.getRuntimeTest();
-            String name = runtimeTest.getName();
-            String status = getTestStatus( testResult.getOverallStatusEntry() );
-            String module = runtimeTest.getModule();
-            Category category = categories.get( module );
-            category.setCategoryActive( true );
-
-            if ( module.equals( HADOOP_FILE_SYSTEM ) ) {
-              Test test = new Test( name );
-              test.setTestStatus( status );
-              test.setTestActive( true );
-              category.addTest( test );
-              configureHadoopFileSystemTestCategory( category, !StringUtil.isEmpty( nc.getHdfsHost() ), status );
-            } else if ( module.equals( OOZIE ) ) {
-              configureTestCategories( category, !StringUtil.isEmpty( nc.getOozieUrl() ), status );
-            } else if ( module.equals( KAFKA ) ) {
-              configureTestCategories( category, !StringUtil.isEmpty( nc.getKafkaBootstrapServers() ), status );
-            } else if ( module.equals( ZOOKEEPER ) ) {
-              configureTestCategories( category, !StringUtil.isEmpty( nc.getZooKeeperHost() ), status );
-            } else if ( module.equals( MAP_REDUCE ) ) {
-              configureTestCategories( category, !StringUtil.isEmpty( nc.getJobTrackerHost() ), status );
+    public Object[] produceTestCategories(RuntimeTestStatus runtimeTestStatus, NamedCluster nc) {
+        LinkedHashMap<String, TestCategory> categories = new LinkedHashMap<>();
+        if (NamedClusterHelper.isConnectedToRepo()) {
+            String endpointURL = NamedClusterHelper.getEndpointURL("runTests");
+            endpointURL = endpointURL + "&namedCluster=" + nc.getName();
+            String result = doGet(endpointURL);
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                return mapper.readValue(result, TestCategory[].class);
+            } catch (Exception e) {
+                log.logError(e.getMessage());
             }
-          }
+        } else {
+            categories.put(HADOOP_FILE_SYSTEM, new TestCategory("Hadoop file system"));
+            categories.put(ZOOKEEPER, new TestCategory("Zookeeper connection"));
+            categories.put(MAP_REDUCE, new TestCategory("Job tracker / resource manager"));
+            categories.put(OOZIE, new TestCategory("Oozie host connection"));
+            categories.put(KAFKA, new TestCategory("Kafka connection"));
+
+            if (runtimeTestStatus != null && nc != null) {
+                for (RuntimeTestModuleResults moduleResults : runtimeTestStatus.getModuleResults()) {
+                    for (RuntimeTestResult testResult : moduleResults.getRuntimeTestResults()) {
+                        RuntimeTest runtimeTest = testResult.getRuntimeTest();
+                        String name = runtimeTest.getName();
+                        String status = getTestStatus(testResult.getOverallStatusEntry());
+                        String module = runtimeTest.getModule();
+                        Category category = categories.get(module);
+                        category.setCategoryActive(true);
+
+                        if (module.equals(HADOOP_FILE_SYSTEM)) {
+                            Test test = new Test(name);
+                            test.setTestStatus(status);
+                            test.setTestActive(true);
+                            category.addTest(test);
+                            configureHadoopFileSystemTestCategory(category, !StringUtil.isEmpty(nc.getHdfsHost()), status);
+                        } else if (module.equals(OOZIE)) {
+                            configureTestCategories(category, !StringUtil.isEmpty(nc.getOozieUrl()), status);
+                        } else if (module.equals(KAFKA)) {
+                            configureTestCategories(category, !StringUtil.isEmpty(nc.getKafkaBootstrapServers()), status);
+                        } else if (module.equals(ZOOKEEPER)) {
+                            configureTestCategories(category, !StringUtil.isEmpty(nc.getZooKeeperHost()), status);
+                        } else if (module.equals(MAP_REDUCE)) {
+                            configureTestCategories(category, !StringUtil.isEmpty(nc.getJobTrackerHost()), status);
+                        }
+                    }
+                }
+            }
         }
-      }
+        return categories.values().toArray();
     }
-    return categories.values().toArray();
-  }
 
-  private void configureHadoopFileSystemTestCategory( Category category, boolean isActive, String status ) {
-    category.setCategoryActive( isActive );
-    if ( category.isCategoryActive() ) {
-      String currentStatus = category.getCategoryStatus();
-      if ( status.equals( FAIL ) || ( status.equals( WARNING ) && !currentStatus.equals( FAIL ) ) || (
-        status.equals( PASS ) && StringUtil.isEmpty( currentStatus ) ) ) {
-        category.setCategoryStatus( status );
-      }
-    }
-  }
-
-  private void configureTestCategories( Category category, boolean isActive, String status ) {
-    category.setCategoryActive( isActive );
-    if ( category.isCategoryActive() ) {
-      category.setCategoryStatus( status );
-    }
-  }
-
-  private String getTestStatus( RuntimeTestResultEntry summary ) {
-    String status = "";
-    switch ( summary.getSeverity() ) {
-      case INFO:
-        status = PASS;
-        break;
-      case SKIPPED:
-        status = WARNING;
-        break;
-      case FATAL:
-        status = FAIL;
-        break;
-      case ERROR:
-        status = FAIL;
-        break;
-      case WARNING:
-        status = FAIL;
-        break;
-      default:
-        break;
-    }
-    return status;
-  }
-
-  public void onProgress( final RuntimeTestStatus clusterTestStatus ) {
-    synchronized ( this ) {
-      if ( clusterTestStatus.isDone() ) {
-        runtimeTestStatus = clusterTestStatus;
-        notifyAll();
-      }
-    }
-  }
-
-  @VisibleForTesting
-  void refreshTree() {
-    if ( spoon != null && spoon.getShell() != null ) {
-      spoon.getShell().getDisplay().asyncExec( () -> spoon.refreshTree( STRING_NAMED_CLUSTERS ) );
-    }
-  }
-
-  @VisibleForTesting
-  String getNamedClusterConfigsRootDir() {
-    return System.getProperty( "user.home" ) + File.separator + ".pentaho" + File.separator + "metastore"
-      + File.separator + "pentaho" + File.separator + "NamedCluster" + File.separator + "Configs";
-  }
-
-  public static String doGet( String endpointURL ) {
-    String result = null;
-    try {
-      HttpGet httpGet = new HttpGet( endpointURL );
-      HttpHost targetHost = new HttpHost( httpGet.getURI().getHost(), httpGet.getURI().getPort() );
-      BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
-      AuthScope authScope = new AuthScope( targetHost );
-      String userName = NamedClusterHelper.getSecurityCredentials().get( NamedClusterHelper.USERNAME );
-      String password = NamedClusterHelper.getSecurityCredentials().get( NamedClusterHelper.PASSWORD );
-      credsProvider.setCredentials( authScope, new UsernamePasswordCredentials( userName, password ) );
-      AuthCache authCache = new BasicAuthCache();
-      authCache.put( targetHost, new BasicScheme() );
-      HttpClientContext context = HttpClientContext.create();
-      context.setCredentialsProvider( credsProvider );
-      context.setAuthCache( authCache );
-      try ( CloseableHttpClient httpClient = HttpClients.createDefault() ) {
-        try ( CloseableHttpResponse response = httpClient.execute( httpGet, context ) ) {
-          HttpEntity entity = response.getEntity();
-          if ( entity != null ) {
-            result = EntityUtils.toString( entity );
-          }
+    private void configureHadoopFileSystemTestCategory(Category category, boolean isActive, String status) {
+        category.setCategoryActive(isActive);
+        if (category.isCategoryActive()) {
+            String currentStatus = category.getCategoryStatus();
+            if (status.equals(FAIL) || (status.equals(WARNING) && !currentStatus.equals(FAIL)) || (status.equals(PASS) && StringUtil.isEmpty(currentStatus))) {
+                category.setCategoryStatus(status);
+            }
         }
-      }
-    } catch ( Exception e ) {
-      log.logError( e.getMessage() );
     }
-    return result;
-  }
 
-  private boolean doMultipartHttpPost( String endpoint, ThinNameClusterModel thinNameClusterModel, File driverFile ) throws BadSiteFilesException, IOException {
-    boolean result;
-    String endpointURL = NamedClusterHelper.getEndpointURL( endpoint );
-    HttpPost httpPost = new HttpPost( endpointURL );
-    HttpHost targetHost = new HttpHost( httpPost.getURI().getHost(), httpPost.getURI().getPort() );
-    BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
-    AuthScope authScope = new AuthScope( targetHost );
-    String userName = NamedClusterHelper.getSecurityCredentials().get( NamedClusterHelper.USERNAME );
-    String password = NamedClusterHelper.getSecurityCredentials().get( NamedClusterHelper.PASSWORD );
-    credsProvider.setCredentials( authScope, new UsernamePasswordCredentials( userName, password ) );
-    AuthCache authCache = new BasicAuthCache();
-    authCache.put( targetHost, new BasicScheme() );
-    HttpClientContext context = HttpClientContext.create();
-    context.setCredentialsProvider( credsProvider );
-    context.setAuthCache( authCache );
-    MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-    if ( driverFile != null ) {
-      builder.addBinaryBody(
-        driverFile.getName(),
-        driverFile,
-        ContentType.APPLICATION_OCTET_STREAM,
-        driverFile.getName()
-      );
-    } else {
-      Map<String, CachedFileItemStream>  siteFileSource = NamedClusterHelper.processSiteFiles( thinNameClusterModel, this );
-      for ( Map.Entry<String, CachedFileItemStream> siteFile : siteFileSource.entrySet() ) {
-        String name = siteFile.getValue().getFieldName();
-        if ( isValidConfigurationFile( name ) ) {
-          if ( name.equals( KEYTAB_AUTH_FILE ) || name.equals( KEYTAB_IMPL_FILE ) || !name.endsWith( "-site.xml" ) ) {
-            builder.addBinaryBody(
-              name,
-              siteFile.getValue().getCachedInputStream(),
-              ContentType.APPLICATION_OCTET_STREAM,
-              siteFile.getValue().getName()
+    private void configureTestCategories(Category category, boolean isActive, String status) {
+        category.setCategoryActive(isActive);
+        if (category.isCategoryActive()) {
+            category.setCategoryStatus(status);
+        }
+    }
+
+    private String getTestStatus(RuntimeTestResultEntry summary) {
+        String status = "";
+        switch (summary.getSeverity()) {
+            case INFO:
+                status = PASS;
+                break;
+            case SKIPPED:
+                status = WARNING;
+                break;
+            case FATAL:
+                status = FAIL;
+                break;
+            case ERROR:
+                status = FAIL;
+                break;
+            case WARNING:
+                status = FAIL;
+                break;
+            default:
+                break;
+        }
+        return status;
+    }
+
+    public void onProgress(final RuntimeTestStatus clusterTestStatus) {
+        synchronized (this) {
+            if (clusterTestStatus.isDone()) {
+                runtimeTestStatus = clusterTestStatus;
+                notifyAll();
+            }
+        }
+    }
+
+    @VisibleForTesting
+    void refreshTree() {
+        if (spoon != null && spoon.getShell() != null) {
+            spoon.getShell().getDisplay().asyncExec(() -> spoon.refreshTree(STRING_NAMED_CLUSTERS));
+        }
+    }
+
+    @VisibleForTesting
+    String getNamedClusterConfigsRootDir() {
+        return System.getProperty("user.home") + File.separator + ".pentaho" + File.separator + "metastore"
+                + File.separator + "pentaho" + File.separator + "NamedCluster" + File.separator + "Configs";
+    }
+
+    /**
+     * Creates an HTTPS-enabled HTTP client with proper SSL/TLS certificate
+     * support. Supports self-signed certificates and proper certificate
+     * validation.
+     *
+     * @return CloseableHttpClient configured for HTTPS connections
+     */
+    private static CloseableHttpClient createSSLEnabledHttpClient() {
+        try {
+            // Load default system keystore with trusted certificates
+            KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+
+            // Create SSL context that accepts self-signed certificates
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial(trustStore, new TrustSelfSignedStrategy())
+                    .build();
+
+            // Create SSL connection socket factory with the configured SSL context
+            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+                    sslContext,
+                    NoopHostnameVerifier.INSTANCE
             );
-          } else {
-            builder.addBinaryBody(
-              siteFile.getValue().getName(),
-              siteFile.getValue().getCachedInputStream(),
-              ContentType.APPLICATION_OCTET_STREAM,
-              siteFile.getValue().getName()
-            );
-          }
+
+            // Build and return HTTP client with SSL support
+            return HttpClientBuilder.create()
+                    .setSSLSocketFactory(sslSocketFactory)
+                    .build();
+        } catch (Exception e) {
+            log.logError("Failed to create SSL-enabled HTTP client: " + e.getMessage());
+            // Fallback to default HTTP client if SSL configuration fails
+            return HttpClients.createDefault();
         }
-      }
     }
-    if ( thinNameClusterModel != null ) {
-      ObjectMapper mapper = new ObjectMapper();
-      String json = mapper.writeValueAsString( thinNameClusterModel );
-      builder.addTextBody( "data", json, ContentType.APPLICATION_JSON );
-    }
-    try ( CloseableHttpClient httpClient = HttpClients.createDefault() ) {
-      HttpEntity multipart = builder.build();
-      httpPost.setEntity( multipart );
-      try ( CloseableHttpResponse response = httpClient.execute( httpPost, context ) ) {
-        result = response.getStatusLine().getStatusCode() == 200;
-      }
-    }
-    return result;
-  }
 
-  public boolean processDriverFile( String driverFile, HadoopClusterManager manager ) throws Exception {
-    boolean result = false;
-    if ( NamedClusterHelper.isConnectedToRepo() ) {
-      File file = new File( driverFile );
-      if ( NamedClusterHelper.isValidUpload( file.getName(), NamedClusterHelper.FileType.DRIVER, manager ) ) {
-        result = doMultipartHttpPost( "installDriver", null, file );
-      }
-    } else {
-      File file = new File( driverFile );
-      FileInputStream driverStream = new FileInputStream( file );
-      if ( NamedClusterHelper.isValidUpload( file.getName(), NamedClusterHelper.FileType.DRIVER, manager ) ) {
-        String destination = Const.getShimDriverDeploymentLocation();
-        FileUtils.copyInputStreamToFile( driverStream,
-          new File( destination + File.separator + file.getName() ) );
-        result = true;
-      }
+    public static String doGet(String endpointURL) {
+        String result = null;
+        try {
+            HttpGet httpGet = new HttpGet(endpointURL);
+            URI uri = httpGet.getURI();
+            String scheme = uri.getScheme() != null ? uri.getScheme() : "http";
+            int port = uri.getPort();
+            if (port == -1) {
+                port = "https".equalsIgnoreCase(scheme) ? 443 : 80;
+            }
+            HttpHost targetHost = new HttpHost(uri.getHost(), port, scheme);
+            BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+            AuthScope authScope = new AuthScope(targetHost);
+            String userName = NamedClusterHelper.getSecurityCredentials().get(NamedClusterHelper.USERNAME);
+            String password = NamedClusterHelper.getSecurityCredentials().get(NamedClusterHelper.PASSWORD);
+            credsProvider.setCredentials(authScope, new UsernamePasswordCredentials(userName, password));
+            AuthCache authCache = new BasicAuthCache();
+            authCache.put(targetHost, new BasicScheme());
+            HttpClientContext context = HttpClientContext.create();
+            context.setCredentialsProvider(credsProvider);
+            context.setAuthCache(authCache);
+            try (CloseableHttpClient httpClient = createSSLEnabledHttpClient()) {
+                try (CloseableHttpResponse response = httpClient.execute(httpGet, context)) {
+                    HttpEntity entity = response.getEntity();
+                    if (entity != null) {
+                        result = EntityUtils.toString(entity);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.logError(e.getMessage());
+        }
+        return result;
     }
-    return result;
-  }
 
-  public void saveNewNamedCluster( ThinNameClusterModel thinNameClusterModel, String dialogState ) throws IOException, BadSiteFilesException {
-    if ( NamedClusterHelper.isConnectedToRepo() ) {
-      if ( dialogState.equals( "new-edit" ) ) {
-        doMultipartHttpPost( "createNamedCluster", thinNameClusterModel, null );
-      }
-      if ( dialogState.equals( "import" ) ) {
-        doMultipartHttpPost( "importNamedCluster", thinNameClusterModel, null );
-      }
-    } else {
-      Map<String, CachedFileItemStream> siteFiles = processSiteFiles( thinNameClusterModel, this );
-      if ( dialogState.equals( "new-edit" ) ) {
-        createNamedCluster( thinNameClusterModel, siteFiles );
-      }
-      if ( dialogState.equals( "import" ) ) {
-        importNamedCluster( thinNameClusterModel, siteFiles );
-      }
+    private boolean doMultipartHttpPost(String endpoint, ThinNameClusterModel thinNameClusterModel, File driverFile) throws BadSiteFilesException, IOException {
+        boolean result;
+        String endpointURL = NamedClusterHelper.getEndpointURL(endpoint);
+        HttpPost httpPost = new HttpPost(endpointURL);
+        URI uri = httpPost.getURI();
+        String scheme = uri.getScheme() != null ? uri.getScheme() : "http";
+        int port = uri.getPort();
+        if (port == -1) {
+            port = "https".equalsIgnoreCase(scheme) ? 443 : 80;
+        }
+        HttpHost targetHost = new HttpHost(uri.getHost(), port, scheme);
+        BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+        AuthScope authScope = new AuthScope(targetHost);
+        String userName = NamedClusterHelper.getSecurityCredentials().get(NamedClusterHelper.USERNAME);
+        String password = NamedClusterHelper.getSecurityCredentials().get(NamedClusterHelper.PASSWORD);
+        credsProvider.setCredentials(authScope, new UsernamePasswordCredentials(userName, password));
+        AuthCache authCache = new BasicAuthCache();
+        authCache.put(targetHost, new BasicScheme());
+        HttpClientContext context = HttpClientContext.create();
+        context.setCredentialsProvider(credsProvider);
+        context.setAuthCache(authCache);
+        MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+        if (driverFile != null) {
+            builder.addBinaryBody(
+                    driverFile.getName(),
+                    driverFile,
+                    ContentType.APPLICATION_OCTET_STREAM,
+                    driverFile.getName()
+            );
+        } else {
+            Map<String, CachedFileItemStream> siteFileSource = NamedClusterHelper.processSiteFiles(thinNameClusterModel, this);
+            for (Map.Entry<String, CachedFileItemStream> siteFile : siteFileSource.entrySet()) {
+                String name = siteFile.getValue().getFieldName();
+                if (isValidConfigurationFile(name)) {
+                    if (name.equals(KEYTAB_AUTH_FILE) || name.equals(KEYTAB_IMPL_FILE) || !name.endsWith("-site.xml")) {
+                        builder.addBinaryBody(
+                                name,
+                                siteFile.getValue().getCachedInputStream(),
+                                ContentType.APPLICATION_OCTET_STREAM,
+                                siteFile.getValue().getName()
+                        );
+                    } else {
+                        builder.addBinaryBody(
+                                siteFile.getValue().getName(),
+                                siteFile.getValue().getCachedInputStream(),
+                                ContentType.APPLICATION_OCTET_STREAM,
+                                siteFile.getValue().getName()
+                        );
+                    }
+                }
+            }
+        }
+        if (thinNameClusterModel != null) {
+            ObjectMapper mapper = new ObjectMapper();
+            String json = mapper.writeValueAsString(thinNameClusterModel);
+            builder.addTextBody("data", json, ContentType.APPLICATION_JSON);
+        }
+        try (CloseableHttpClient httpClient = createSSLEnabledHttpClient()) {
+            HttpEntity multipart = builder.build();
+            httpPost.setEntity(multipart);
+            try (CloseableHttpResponse response = httpClient.execute(httpPost, context)) {
+                result = response.getStatusLine().getStatusCode() == 200;
+            }
+        }
+        return result;
     }
-  }
 
-  public void saveEditedNamedCluster( ThinNameClusterModel thinNameClusterModel, boolean isEditMode ) throws IOException, BadSiteFilesException {
-    if ( NamedClusterHelper.isConnectedToRepo() ) {
-      if( isEditMode ) {
-        doMultipartHttpPost( "editNamedCluster", thinNameClusterModel, null );
-      } else {
-        doMultipartHttpPost( "duplicateNamedCluster", thinNameClusterModel, null );
-      }
-    } else {
-      Map<String, CachedFileItemStream> siteFiles = processSiteFiles( thinNameClusterModel, this );
-      editNamedCluster( thinNameClusterModel, isEditMode, siteFiles );
+    public boolean processDriverFile(String driverFile, HadoopClusterManager manager) throws Exception {
+        boolean result = false;
+        if (NamedClusterHelper.isConnectedToRepo()) {
+            File file = new File(driverFile);
+            if (NamedClusterHelper.isValidUpload(file.getName(), NamedClusterHelper.FileType.DRIVER, manager)) {
+                result = doMultipartHttpPost("installDriver", null, file);
+            }
+        } else {
+            File file = new File(driverFile);
+            FileInputStream driverStream = new FileInputStream(file);
+            if (NamedClusterHelper.isValidUpload(file.getName(), NamedClusterHelper.FileType.DRIVER, manager)) {
+                String destination = Const.getShimDriverDeploymentLocation();
+                FileUtils.copyInputStreamToFile(driverStream,
+                        new File(destination + File.separator + file.getName()));
+                result = true;
+            }
+        }
+        return result;
     }
-  }
+
+    public void saveNewNamedCluster(ThinNameClusterModel thinNameClusterModel, String dialogState) throws IOException, BadSiteFilesException {
+        if (NamedClusterHelper.isConnectedToRepo()) {
+            if (dialogState.equals("new-edit")) {
+                doMultipartHttpPost("createNamedCluster", thinNameClusterModel, null);
+            }
+            if (dialogState.equals("import")) {
+                doMultipartHttpPost("importNamedCluster", thinNameClusterModel, null);
+            }
+        } else {
+            Map<String, CachedFileItemStream> siteFiles = processSiteFiles(thinNameClusterModel, this);
+            if (dialogState.equals("new-edit")) {
+                createNamedCluster(thinNameClusterModel, siteFiles);
+            }
+            if (dialogState.equals("import")) {
+                importNamedCluster(thinNameClusterModel, siteFiles);
+            }
+        }
+    }
+
+    public void saveEditedNamedCluster(ThinNameClusterModel thinNameClusterModel, boolean isEditMode) throws IOException, BadSiteFilesException {
+        if (NamedClusterHelper.isConnectedToRepo()) {
+            if (isEditMode) {
+                doMultipartHttpPost("editNamedCluster", thinNameClusterModel, null);
+            } else {
+                doMultipartHttpPost("duplicateNamedCluster", thinNameClusterModel, null);
+            }
+        } else {
+            Map<String, CachedFileItemStream> siteFiles = processSiteFiles(thinNameClusterModel, this);
+            editNamedCluster(thinNameClusterModel, isEditMode, siteFiles);
+        }
+    }
 }
