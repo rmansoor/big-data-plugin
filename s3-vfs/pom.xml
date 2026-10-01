@@ -12,7 +12,8 @@
 
   <groupId>pentaho</groupId>
   <artifactId>pentaho-s3-vfs</artifactId>
-  <version>10.1.0.0-SNAPSHOT</version>
+  <version>10.1.0.0-jdk21-1</version>
+  <!-- local Java 21 / CVE build for pentaho-kettle 10.1 -->
   <packaging>jar</packaging>
 
   <licenses>
@@ -25,6 +26,8 @@
   </licenses>
 
   <properties>
+    <!-- 1.11.275 has CVE-2022-31159; same as pentaho-kettle 9.4 -->
+    <aws-java-sdk.version>1.12.797</aws-java-sdk.version>
 
     <!-- pentaho dependencies -->
     <pdi.version>10.1.0.0-SNAPSHOT</pdi.version>

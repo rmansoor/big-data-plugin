@@ -25,6 +25,12 @@
         <exclude>pentaho:pentaho-big-data-kettle-plugins-kafka:jar</exclude>
         <exclude>org.apache.kafka:kafka-clients:jar</exclude>
         <exclude>org.slf4j:*</exclude>
+        <!-- guava and its helper jars come from PDI's lib/ (guava 33) -->
+        <exclude>com.google.guava:*</exclude>
+        <exclude>com.google.code.findbugs:jsr305</exclude>
+        <exclude>com.google.errorprone:*</exclude>
+        <exclude>com.google.j2objc:*</exclude>
+        <exclude>org.checkerframework:*</exclude>
       </excludes>
     </dependencySet>
     <dependencySet>
